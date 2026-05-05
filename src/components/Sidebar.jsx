@@ -1,9 +1,8 @@
-import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useBioterio } from '../context/BiotheriumContextPro'
 import { useEspecie } from '../context/EspecieContext'
 import {
-  LayoutDashboard, Printer, ChevronUp, ChevronDown, Dna, RefreshCw,
+  LayoutDashboard, Printer, Dna, RefreshCw,
 } from 'lucide-react'
 import GenERatsBrand from './GenERatsBrand'
 
@@ -11,91 +10,6 @@ const NAV_LINKS = [
   { to: '/',             label: 'Panel de hoy',    icon: <LayoutDashboard size={15} /> },
   { to: '/reportes',     label: 'Reportes',         icon: <Printer size={15} /> },
 ]
-
-const SECCIONES = [
-  'Panel de hoy', 'Reportes',
-]
-
-function ReportarError() {
-  const [abierto, setAbierto]  = useState(false)
-  const [seccion, setSeccion]  = useState('')
-  const [descripcion, setDesc] = useState('')
-  const [enviado, setEnviado]  = useState(false)
-
-  function enviar() {
-    if (!descripcion.trim()) return
-    const asunto = encodeURIComponent(`[BioteríoPro] Error en: ${seccion || 'sin especificar'}`)
-    const cuerpo = encodeURIComponent(
-      `Sección: ${seccion || 'sin especificar'}\n\nDescripción:\n${descripcion.trim()}\n\n---\nEnviado desde BioteríoPro`
-    )
-    window.location.href = `mailto:LucasDeRiviaDev@gmail.com?subject=${asunto}&body=${cuerpo}`
-    setEnviado(true)
-    setTimeout(() => { setEnviado(false); setSeccion(''); setDesc(''); setAbierto(false) }, 2000)
-  }
-
-  return (
-    <div className="mx-3 mb-3 rounded-xl overflow-hidden"
-      style={{ border: '1px solid rgba(255,61,87,0.25)', background: 'rgba(255,61,87,0.04)' }}
-    >
-      <button
-        onClick={() => setAbierto(!abierto)}
-        className="w-full px-4 py-3 flex items-center justify-between gap-2 transition-all"
-        style={{ background: 'rgba(255,61,87,0.08)', borderBottom: abierto ? '1px solid rgba(255,61,87,0.2)' : 'none', cursor: 'pointer' }}
-      >
-        <div className="flex items-center gap-2">
-          <Bug size={14} style={{ color: '#ff6b80' }} />
-          <span className="text-xs font-semibold" style={{ color: '#ff6b80' }}>Reportar error</span>
-        </div>
-        <span style={{ color: '#ff6b80' }}>{abierto ? <ChevronUp size={14} /> : <ChevronDown size={14} />}</span>
-      </button>
-
-      {abierto && (
-        <div className="px-4 py-3 space-y-3">
-          <div>
-            <label className="text-xs font-semibold block mb-1" style={{ color: '#4a5f7a' }}>¿Dónde ocurrió?</label>
-            <select
-              value={seccion}
-              onChange={(e) => setSeccion(e.target.value)}
-              className="w-full px-2 py-1.5 rounded-lg text-xs focus:outline-none"
-              style={{ background: 'rgba(8,13,26,0.8)', border: '1px solid rgba(255,61,87,0.25)', color: '#c9d4e0' }}
-            >
-              <option value="">— Seleccioná una sección —</option>
-              {SECCIONES.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs font-semibold block mb-1" style={{ color: '#4a5f7a' }}>Describí el error</label>
-            <textarea
-              value={descripcion}
-              onChange={(e) => setDesc(e.target.value)}
-              placeholder="¿Qué pasó? ¿Qué esperabas que pasara?"
-              rows={3}
-              className="w-full px-2 py-1.5 rounded-lg text-xs resize-none focus:outline-none"
-              style={{ background: 'rgba(8,13,26,0.8)', border: '1px solid rgba(255,61,87,0.25)', color: '#c9d4e0' }}
-            />
-          </div>
-          <button
-            onClick={enviar}
-            disabled={!descripcion.trim() || enviado}
-            className="w-full py-2 rounded-lg text-xs font-bold transition-all"
-            style={{
-              background: enviado ? 'rgba(0,230,118,0.15)' : 'rgba(255,61,87,0.15)',
-              border: `1px solid ${enviado ? 'rgba(0,230,118,0.4)' : 'rgba(255,61,87,0.4)'}`,
-              color: enviado ? '#00e676' : '#ff6b80',
-              cursor: !descripcion.trim() || enviado ? 'not-allowed' : 'pointer',
-              opacity: !descripcion.trim() ? 0.5 : 1,
-            }}
-          >
-            {enviado ? '✓ Abriendo...' : <><Send size={12} style={{ display: 'inline', marginRight: 4 }} />Enviar reporte</>}
-          </button>
-          <p className="text-xs text-center" style={{ color: 'rgba(74,95,122,0.6)' }}>
-            Se abre tu app de correo con el reporte listo para enviar.
-          </p>
-        </div>
-      )}
-    </div>
-  )
-}
 
 export default function Sidebar({ onCerrarMenu }) {
   const { animales, camadas, bio } = useBioterio()
@@ -266,9 +180,6 @@ export default function Sidebar({ onCerrarMenu }) {
           )}
         </div>
       )}
-
-      {/* Reportar error */}
-      <ReportarError />
 
       {/* Footer — Logo GenERats */}
       <div
