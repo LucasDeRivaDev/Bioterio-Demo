@@ -3,30 +3,17 @@ import { NavLink } from 'react-router-dom'
 import { useBioterio } from '../context/BiotheriumContextPro'
 import { useEspecie } from '../context/EspecieContext'
 import {
-  LayoutDashboard, Rat, Layers, Calendar, Package, Skull,
-  Truck, BarChart2, Thermometer, Printer, Bug, Send,
-  ChevronUp, ChevronDown, Dna, RefreshCw,
+  LayoutDashboard, Printer, ChevronUp, ChevronDown, Dna, RefreshCw,
 } from 'lucide-react'
 import GenERatsBrand from './GenERatsBrand'
 
 const NAV_LINKS = [
   { to: '/',             label: 'Panel de hoy',    icon: <LayoutDashboard size={15} /> },
-  { to: '/animales',     label: 'Reproductores',   icon: <Rat size={15} /> },
-  { to: '/camadas',      label: 'Emparejamientos', icon: <Layers size={15} /> },
-  { to: '/calendario',   label: 'Calendario',      icon: <Calendar size={15} /> },
-  { to: '/stock',        label: 'Stock',            icon: <Package size={15} /> },
-  { to: '/sacrificios',  label: 'Sacrificios',      icon: <Skull size={15} /> },
-  { to: '/entregas',     label: 'Entregas',         icon: <Truck size={15} /> },
-  { to: '/rendimiento',  label: 'Rendimiento',      icon: <BarChart2 size={15} />, group: 'Análisis' },
-  { to: '/estadisticas', label: 'Estadísticas',     icon: <BarChart2 size={15} /> },
-  { to: '/temperatura',  label: 'Temperatura',      icon: <Thermometer size={15} /> },
   { to: '/reportes',     label: 'Reportes',         icon: <Printer size={15} /> },
 ]
 
 const SECCIONES = [
-  'Panel de hoy', 'Reproductores', 'Emparejamientos', 'Stock',
-  'Entregas', 'Sacrificios', 'Rendimiento', 'Estadísticas',
-  'Temperatura', 'Reportes', 'Otra sección',
+  'Panel de hoy', 'Reportes',
 ]
 
 function ReportarError() {
