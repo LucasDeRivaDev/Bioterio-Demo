@@ -16,6 +16,7 @@ import Entregas from './pages/Entregas'
 import Temperatura from './pages/Temperatura'
 import Estadisticas from './pages/Estadisticas'
 import Incidentes from './pages/Incidentes'
+import Tutorial from './pages/Tutorial'
 
 // ── Layout principal ──────────────────────────────────────────────────────────
 function AppLayout() {
@@ -85,6 +86,7 @@ function AppLayout() {
             <Route path="/estadisticas" element={<Estadisticas />} />
             <Route path="/incidentes"   element={<Incidentes />} />
             <Route path="/reportes"     element={<Reportes />} />
+            <Route path="/tutorial"     element={<Tutorial />} />
             <Route path="*"             element={<Navigate to="/" replace />} />
           </Routes>
         </div>

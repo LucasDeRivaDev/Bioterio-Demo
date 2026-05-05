@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useBioterio } from '../context/BiotheriumContext'
 import { difDias, parseDate, hoy, formatFecha, calcularPerfilHembra, calcularRendimientoMacho } from '../utils/calculos'
-import { BIO } from '../utils/constants'
 import Modal from '../components/Modal'
 import { TestTube2, FlaskConical, Microscope, UserPlus } from 'lucide-react'
 import Sacrificios from '../pages/Sacrificios'
@@ -42,9 +41,9 @@ const CAT = {
   adultos:      { label: 'Adultos',             color: '#ff6b80', bg: 'rgba(255,61,87,0.08)',   borde: 'rgba(255,61,87,0.25)', icono: '🐁' },
 }
 
-function categoriaStock(edad) {
+function categoriaStock(edad, bio) {
   if (edad < 42) return 'crias'
-  if (edad < BIO.MADUREZ_DIAS) return 'jovenes'
+  if (edad < bio.MADUREZ_DIAS) return 'jovenes'
   return 'adultos'
 }
 
@@ -1306,7 +1305,7 @@ function CategoriaCard({ icono, titulo, subtitulo, total, grupos, gruposLabel, m
 
 
 export default function Stock() {
-  const { animales, camadas, sacrificios, entregas, jaulas, agregarAnimal, editarAnimal, sacrificarReproductor, editarJaula, agregarJaula, eliminarJaula, registrarSacrificio, registrarEntrega, entregarReproductor } = useBioterio()
+  const { animales, camadas, sacrificios, entregas, jaulas, agregarAnimal, editarAnimal, sacrificarReproductor, editarJaula, agregarJaula, eliminarJaula, registrarSacrificio, registrarEntrega, entregarReproductor, bio } = useBioterio()
   const [vista, setVista] = useState('jaulas')
   const [subVista, setSubVista] = useState(null)
   const [detalle, setDetalle] = useState(null)
@@ -1350,7 +1349,7 @@ export default function Stock() {
         madre,
         padre,
         edad,
-        categoria: categoriaStock(edad),
+        categoria: categoriaStock(edad, bio),
         total: jaula.total,
         machos: jaula.machos,
         hembras: jaula.hembras,
@@ -1375,7 +1374,7 @@ export default function Stock() {
         madre,
         padre,
         edad,
-        categoria: categoriaStock(edad),
+        categoria: categoriaStock(edad, bio),
         total: stock,
         machos: camada.crias_machos,
         hembras: camada.crias_hembras,
@@ -1383,7 +1382,7 @@ export default function Stock() {
     })
 
     return result
-  }, [animales, camadas, jaulas, sacrificios])
+  }, [animales, camadas, jaulas, sacrificios, bio])
 
   // ── Resumen por categoría ─────────────────────────────────────────────────
   const resumen = useMemo(() => {
@@ -1410,7 +1409,7 @@ export default function Stock() {
     // Lactantes (pre-destete) — no están en bloques todavía, los sacamos de camadas
     camadas.filter((c) => c.fecha_nacimiento && !c.failure_flag && c.incluir_en_stock !== false).forEach((c) => {
       const edad = edadDias(c.fecha_nacimiento)
-      if (edad === null || edad >= BIO.DESTETE_DIAS) return
+      if (edad === null || edad >= bio.DESTETE_DIAS) return
       lactantes.total += c.total_crias ?? 0
       lactantes.grupos += 1
     })
@@ -1424,7 +1423,7 @@ export default function Stock() {
       const h = b.hembras ?? 0
       if (edad < 42) {
         crias.total += total; crias.grupos += 1; crias.machos += m; crias.hembras += h
-      } else if (edad < BIO.MADUREZ_DIAS) {
+      } else if (edad < bio.MADUREZ_DIAS) {
         jovenes.total += total; jovenes.grupos += 1; jovenes.machos += m; jovenes.hembras += h
       } else {
         adultosNR.total += total; adultosNR.grupos += 1; adultosNR.machos += m; adultosNR.hembras += h
@@ -1432,7 +1431,7 @@ export default function Stock() {
     })
 
     return { hembrasRepro, machosRepro, crias, jovenes, adultosNR, lactantes }
-  }, [animales, camadas, bloques])
+  }, [animales, camadas, bloques, bio])
 
   const bloquesFiltrados = useMemo(() =>
     filtroCat === 'todas' ? bloques : bloques.filter((b) => b.categoria === filtroCat),
