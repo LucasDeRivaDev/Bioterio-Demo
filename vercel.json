@@ -1,5 +1,5 @@
 {
-  "build": {
-    "preset": "vite"
-  }
+  "framework": "vite",
+  "buildCommand": "npx vite build",
+  "outputDirectory": "dist"
 }
