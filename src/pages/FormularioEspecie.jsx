@@ -166,12 +166,9 @@ export default function FormularioEspecie() {
       <button
         onClick={confirmar}
         disabled={!form}
-        className="px-8 py-3 rounded-lg font-semibold text-sm transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-        style={{
-          background: form ? '#00e676' : undefined,
-          color: form ? '#050810' : undefined,
-          backgroundColor: form ? undefined : '#1e2f55',
-        }}
+        className={`px-8 py-3 rounded-lg font-semibold text-sm transition-all ${
+          !form ? 'opacity-40 cursor-not-allowed bg-lab-600 text-rat-gray' : 'bg-neon-green text-lab-950 hover:bg-neon-greenDim'
+        }`}
       >
         {form ? `Comenzar con ${form.nombre}` : 'Seleccioná una especie'}
       </button>
