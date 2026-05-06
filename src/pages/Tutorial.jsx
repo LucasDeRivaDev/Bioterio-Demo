@@ -13,12 +13,12 @@ const PASOS = [
   {
     icono: <BookOpen size={36} />,
     color: '#00e676',
-    titulo: 'Bienvenido a BioteríoPro',
+    titulo: 'Bienvenido a BioteríoDemo',
     subtitulo: 'Tu sistema de gestión de colonias reproductivas',
     descripcion: (
       <div className="space-y-4">
         <p>
-          <strong style={{ color: '#c9d4e0' }}>BioteríoPro</strong> es una herramienta
+          <strong style={{ color: '#c9d4e0' }}>BioteríoDemo</strong> es una herramienta
           diseñada para bioterios de investigación que necesitan hacer seguimiento
           reproductivo de su colonia animal.
         </p>
@@ -59,7 +59,7 @@ const PASOS = [
     descripcion: (
       <div className="space-y-4">
         <p>
-          Cuando entrás a BioteríoPro por primera vez, la app te pide que elijas
+          Cuando entrás a BioteríoDemo por primera vez, la app te pide que elijas
           con qué especie vas a trabajar. Podés elegir entre los
           <strong style={{ color: '#ce93d8' }}> presets incluidos</strong> o
           crear una especie personalizada.
@@ -247,7 +247,7 @@ const PASOS = [
           className="rounded-xl p-3 text-xs"
           style={{ background: 'rgba(255,179,0,0.06)', border: '1px solid rgba(255,179,0,0.2)', color: '#8a9bb0' }}
         >
-          <span style={{ color: '#ffb300' }}>💡 Tip:</span> BioteríoPro usa los parámetros
+          <span style={{ color: '#ffb300' }}>💡 Tip:</span> BioteríoDemo usa los parámetros
           biológicos de tu especie para calcular las fechas. Si trabajás con cobayos
           (gestación 65 días) los plazos van a ser completamente distintos a los de una
           rata (gestación 23 días).
@@ -505,7 +505,7 @@ const PASOS = [
     descripcion: (
       <div className="space-y-4">
         <p>
-          Ahora tenés una visión completa de BioteríoPro.
+          Ahora tenés una visión completa de BioteríoDemo.
           Te dejamos un resumen del flujo de trabajo recomendado para cuando arrancás:
         </p>
 

@@ -1,5 +1,5 @@
 /**
- * BiotheriumContextPro.jsx — BioteríoPro
+ * BiotheriumContextPro.jsx — BioteríoDemo
  *
  * Misma lógica que BiotheriumContextDemo.jsx pero usa useEspecie()
  * en lugar de useBioterioActivo(). Sin Supabase — todo en localStorage.
@@ -12,14 +12,14 @@ import { useEspecie } from './EspecieContext'
 
 // ─── Keys de localStorage ─────────────────────────────────────────────────────
 const LS = {
-  animales:     'pro_animales',
-  camadas:      'pro_camadas',
-  jaulas:       'pro_jaulas',
-  sacrificios:  'pro_sacrificios',
-  entregas:     'pro_entregas',
-  temperaturas: 'pro_temperaturas',
-  incidentes:   'pro_incidentes',
-  extendidos:   'pro_extendidos',
+  animales:     'demo_animales',
+  camadas:      'demo_camadas',
+  jaulas:       'demo_jaulas',
+  sacrificios:  'demo_sacrificios',
+  entregas:     'demo_entregas',
+  temperaturas: 'demo_temperaturas',
+  incidentes:   'demo_incidentes',
+  extendidos:   'demo_extendidos',
 }
 
 function leer(key, fallback) {

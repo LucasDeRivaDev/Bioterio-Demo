@@ -67,7 +67,7 @@ function AppLayout() {
             style={{ background: 'rgba(0,230,118,0.08)', border: '1px solid rgba(0,230,118,0.25)', color: '#00e676' }}
           >
             <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#00e676' }} />
-            PRO
+            DEMO
           </div>
         </div>
 

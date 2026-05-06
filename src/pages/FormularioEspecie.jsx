@@ -1,5 +1,5 @@
 /**
- * FormularioEspecie.jsx — BioteríoPro
+ * FormularioEspecie.jsx — BioteríoDemo
  *
  * Pantalla de onboarding: elige un preset de especie o configura una personalizada.
  * Aparece cuando no hay especie guardada en localStorage.
@@ -56,7 +56,7 @@ export default function FormularioEspecie() {
         <div className="flex items-center gap-2">
           <Dna size={28} className="text-neon-green" />
           <span className="text-2xl font-bold tracking-tight" style={{ fontFamily: 'Space Grotesk, sans-serif' }}>
-            Bioterio<span className="text-neon-green">Pro</span>
+            Bioterio<span className="text-neon-green">Demo</span>
           </span>
         </div>
         <p className="text-rat-gray text-sm">Seleccioná la especie de tu colonia para comenzar</p>

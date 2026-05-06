@@ -1,5 +1,5 @@
 /**
- * EspecieContext.jsx — BioteríoPro
+ * EspecieContext.jsx — BioteríoDemo
  *
  * Reemplaza BioterioActivoContext del proyecto original.
  * En vez de 4 especies hardcodeadas, permite configurar cualquier especie
@@ -121,7 +121,7 @@ export const PRESETS_ESPECIE = [
 ]
 
 // ─── localStorage ─────────────────────────────────────────────────────────────
-const LS_KEY = 'pro_especie'
+const LS_KEY = 'demo_especie'
 
 function leerEspecie() {
   try {

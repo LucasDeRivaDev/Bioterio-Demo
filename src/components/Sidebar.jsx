@@ -54,7 +54,7 @@ export default function Sidebar({ onCerrarMenu }) {
           </div>
           <div>
             <div className="font-bold text-white text-sm tracking-wide">BIOTERIO</div>
-            <div className="text-xs font-mono" style={{ color: 'rgba(0,230,118,0.6)' }}>Pro · LOCAL</div>
+            <div className="text-xs font-mono" style={{ color: 'rgba(0,230,118,0.6)' }}>Demo · LOCAL</div>
           </div>
         </div>
 
