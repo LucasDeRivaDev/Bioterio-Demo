@@ -147,7 +147,7 @@ export default function Sidebar({ onCerrarMenu }) {
   const { especie, limpiarEspecie } = useEspecie()
 
   const [fichaVisible, setFichaVisible] = useState(() => {
-    try { return localStorage.getItem('demo_ficha_visible') !== 'false' }
+    try { return localStorage.getItem('demo_ficha_visible') === 'true' }
     catch { return true }
   })
 
