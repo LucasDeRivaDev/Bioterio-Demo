@@ -146,6 +146,19 @@ export default function Sidebar({ onCerrarMenu }) {
   const { animales, camadas, bio } = useBioterio()
   const { especie, limpiarEspecie } = useEspecie()
 
+  const [fichaVisible, setFichaVisible] = useState(() => {
+    try { return localStorage.getItem('demo_ficha_visible') !== 'false' }
+    catch { return true }
+  })
+
+  function toggleFicha() {
+    setFichaVisible(v => {
+      const nuevo = !v
+      localStorage.setItem('demo_ficha_visible', String(nuevo))
+      return nuevo
+    })
+  }
+
   const datosBio = bio ? [
     { label: 'Gestación',         valor: `${bio.GESTACION_DIAS} días` },
     { label: 'Destete',           valor: `${bio.DESTETE_DIAS} días post-nacimiento` },
@@ -283,36 +296,57 @@ export default function Sidebar({ onCerrarMenu }) {
         <div className="mx-3 mb-3 rounded-xl overflow-hidden"
           style={{ border: '1px solid rgba(161,120,80,0.3)', background: 'rgba(161,120,80,0.05)' }}
         >
-          <div
-            className="px-4 py-3 flex items-center gap-2"
-            style={{ background: 'rgba(161,120,80,0.1)', borderBottom: '1px solid rgba(161,120,80,0.2)' }}
+          {/* Header siempre visible con botón toggle */}
+          <button
+            onClick={toggleFicha}
+            className="w-full px-4 py-3 flex items-center gap-2 text-left"
+            style={{
+              background: 'rgba(161,120,80,0.1)',
+              borderBottom: fichaVisible ? '1px solid rgba(161,120,80,0.2)' : 'none',
+              cursor: 'pointer',
+              border: 'none',
+            }}
           >
             <span className="text-xl">{especie.icono}</span>
-            <div>
+            <div className="flex-1 min-w-0">
               <div className="font-bold text-sm" style={{ color: '#c9a87a' }}>{especie.nombre}</div>
-              <div className="text-xs font-mono italic opacity-60" style={{ color: '#a17850' }}>{especie.nombreCientifico || '—'}</div>
+              <div className="text-xs font-mono italic opacity-60 truncate" style={{ color: '#a17850' }}>{especie.nombreCientifico || '—'}</div>
             </div>
-          </div>
+            <ChevronDown
+              size={13}
+              style={{
+                color: '#a17850',
+                flexShrink: 0,
+                transition: 'transform 0.2s',
+                transform: fichaVisible ? 'rotate(180deg)' : 'rotate(0deg)',
+              }}
+            />
+          </button>
 
-          <div className="px-4 py-3 space-y-2">
-            <div className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: 'rgba(161,120,80,0.5)' }}>
-              Referencias biológicas
-            </div>
-            {datosBio.map(({ label, valor }) => (
-              <div key={label} className="flex items-start justify-between gap-2">
-                <span className="text-xs leading-tight" style={{ color: '#6b7c94' }}>{label}</span>
-                <span className="text-xs font-mono font-semibold text-right" style={{ color: '#a17850' }}>{valor}</span>
+          {/* Contenido colapsable */}
+          {fichaVisible && (
+            <>
+              <div className="px-4 py-3 space-y-2">
+                <div className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: 'rgba(161,120,80,0.5)' }}>
+                  Referencias biológicas
+                </div>
+                {datosBio.map(({ label, valor }) => (
+                  <div key={label} className="flex items-start justify-between gap-2">
+                    <span className="text-xs leading-tight" style={{ color: '#6b7c94' }}>{label}</span>
+                    <span className="text-xs font-mono font-semibold text-right" style={{ color: '#a17850' }}>{valor}</span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
 
-          {especie.orden && especie.orden !== '—' && (
-            <div
-              className="px-4 py-2 text-xs text-center font-mono"
-              style={{ borderTop: '1px solid rgba(161,120,80,0.15)', color: 'rgba(107,124,148,0.5)' }}
-            >
-              {especie.orden}
-            </div>
+              {especie.orden && especie.orden !== '—' && (
+                <div
+                  className="px-4 py-2 text-xs text-center font-mono"
+                  style={{ borderTop: '1px solid rgba(161,120,80,0.15)', color: 'rgba(107,124,148,0.5)' }}
+                >
+                  {especie.orden}
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
