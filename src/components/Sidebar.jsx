@@ -2,14 +2,16 @@ import { NavLink } from 'react-router-dom'
 import { useBioterio } from '../context/BiotheriumContextPro'
 import { useEspecie } from '../context/EspecieContext'
 import {
-  LayoutDashboard, Printer, Dna, RefreshCw, BookOpen,
+  LayoutDashboard, Printer, Dna, RefreshCw, BookOpen, Wheat, Layers,
 } from 'lucide-react'
 import GenERatsBrand from './GenERatsBrand'
 
 const NAV_LINKS = [
-  { to: '/',          label: 'Panel de hoy', icon: <LayoutDashboard size={15} /> },
-  { to: '/reportes',  label: 'Reportes',     icon: <Printer size={15} /> },
-  { to: '/tutorial',  label: 'Tutorial',     icon: <BookOpen size={15} /> },
+  { to: '/',          label: 'Panel de hoy',    icon: <LayoutDashboard size={15} /> },
+  { to: '/alimento',  label: 'Consumo alimento', icon: <Wheat size={15} /> },
+  { to: '/viruta',    label: 'Consumo viruta',   icon: <Layers size={15} /> },
+  { to: '/reportes',  label: 'Reportes',         icon: <Printer size={15} /> },
+  { to: '/tutorial',  label: 'Tutorial',         icon: <BookOpen size={15} /> },
 ]
 
 export default function Sidebar({ onCerrarMenu }) {
