@@ -271,6 +271,9 @@ export default function Sidebar({ onCerrarMenu }) {
           </NavLink>
         ))}
 
+        {/* Separador */}
+        <div style={{ height: '1px', background: 'rgba(30,51,82,0.6)', margin: '6px 4px' }} />
+
         {/* Grupos con submenús */}
         {NAV_GRUPOS.map(grupo => (
           <NavGrupo key={grupo.to} grupo={grupo} onCerrarMenu={onCerrarMenu} />
