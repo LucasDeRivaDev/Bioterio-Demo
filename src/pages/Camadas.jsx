@@ -575,7 +575,7 @@ export default function Camadas() {
 
       return { ...c, rango, fechaDestete, fechaMadurez, fechaSepEsperada, latencia, estado }
     })
-  }, [camadas, hoyDate])
+  }, [camadas, hoyDate, bio])
 
   const filtradas = useMemo(() => {
     const lista = filtro === 'todas' ? camadasEnriquecidas : camadasEnriquecidas.filter((c) => c.estado === filtro)

@@ -172,8 +172,11 @@ export function BiotheriumProProvider({ children }) {
     guardar(LS.camadas, siguientes)
     if (datos.id_madre) {
       const madre = estado.animales.find((a) => a.id === datos.id_madre)
-      if (madre && madre.estado === 'activo') {
-        await editarAnimal({ ...madre, estado: 'en_apareamiento' })
+      if (madre) {
+        const nuevoEstado = datos.fecha_nacimiento ? 'en_cria' : 'en_apareamiento'
+        if (madre.estado === 'activo' || (datos.fecha_nacimiento && madre.estado === 'en_apareamiento')) {
+          await editarAnimal({ ...madre, estado: nuevoEstado })
+        }
       }
     }
   }

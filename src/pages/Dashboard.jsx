@@ -215,10 +215,10 @@ function StatCard({ valor, label, icono, color }) {
 // ── Dashboard principal ───────────────────────────────────────────────────────
 
 // Clave de localStorage para las tareas descartadas (permanente)
-const LS_KEY = 'appMosca_tareas_descartadas'
+const LS_KEY = 'demo_tareas_descartadas'
 
 // Clave para el recordatorio periódico de renovación de machos
-const LS_RENO_KEY = 'appMosca_machos_reno_ts'
+const LS_RENO_KEY = 'demo_machos_reno_ts'
 
 function debesMostrarRenovacion() {
   try {
@@ -291,7 +291,7 @@ export default function Dashboard() {
   const proximosPartos = camadas
     .filter((c) => c.fecha_copula && !c.fecha_nacimiento)
     .map((c) => {
-      const rango = calcularRangoParto(c.fecha_copula)
+      const rango = calcularRangoParto(c.fecha_copula, bio)
       if (!rango) return null
       const madre = animales.find((a) => a.id === c.id_madre)
       return { camada: c, rango, madre, diasHasta: difDias(hoyDate, rango.partoMin) }

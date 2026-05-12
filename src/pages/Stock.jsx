@@ -84,7 +84,7 @@ function SexoDisplay({ bloque, cfg }) {
     if (machos === 0) {
       return (
         <div className="flex items-center gap-1 text-xs font-mono font-semibold">
-          <span style={{ color: COLOR_HEMBRA }}>{cfg.icono} {hembra}{hembra === 1 ? 'Hembra' : 'Hembra'}</span>
+          <span style={{ color: COLOR_HEMBRA }}>{cfg.icono} {hembra}{hembra === 1 ? 'Hembra' : 'Hembras'}</span>
         </div>
       )
     }

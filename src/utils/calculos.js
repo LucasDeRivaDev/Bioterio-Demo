@@ -692,26 +692,29 @@ export function getProbabilidadReceptividad(animalId, extendidos) {
   return { probabilidad: 30, razon: est || 'Desconocido' }
 }
 
-export function getDiaGestacional(animal) {
-  if (!animal.preanada || !animal.fecha_copula) return 0
-  return Math.max(0, difDias(animal.fecha_copula, hoy()))
+export function getDiaGestacional(animal, bio = BIO) {
+  if (!animal.fecha_copula || !animal.en_cria) return 0
+  return Math.max(0, difDias(parseDate(animal.fecha_copula), parseDate(hoy())))
 }
 
-export function getAlertasGestacion(animal) {
+export function getAlertasGestacion(animal, bio = BIO) {
   const alerts = []
-  if (!animal.preanada) return alerts
-  const dia = getDiaGestacional(animal)
-  if (dia === 18) alerts.push({ tipo: 'info', mensaje: 'Día 18 de gestación' })
-  if (dia === 21) alerts.push({ tipo: 'warning', mensaje: 'Día 21 - parto pronto' })
-  const resto = BIO.GESTACION_DIAS - dia
+  if (!animal.en_cria || !animal.fecha_copula) return alerts
+  const dia = getDiaGestacional(animal, bio)
+  const gestacion = bio.GESTACION_DIAS
+  const umbralAviso = Math.round(gestacion * 0.85)
+  const umbralProximo = Math.round(gestacion * 0.95)
+  if (dia === umbralAviso) alerts.push({ tipo: 'info', mensaje: `Día ${dia} de gestación` })
+  if (dia === umbralProximo) alerts.push({ tipo: 'warning', mensaje: `Día ${dia} - parto pronto` })
+  const resto = gestacion - dia
   if (resto === 5) alerts.push({ tipo: 'info', mensaje: `Parto en ${resto} días` })
   if (resto <= 0) alerts.push({ tipo: 'error', mensaje: 'Parto vencido' })
   return alerts
 }
 
-export function getFechaPartoEsperado(fechaCopula) {
+export function getFechaPartoEsperado(fechaCopula, bio = BIO) {
   if (!fechaCopula) return null
-  return sumarDias(parseDate(fechaCopula), BIO.GESTACION_DIAS)
+  return sumarDias(parseDate(fechaCopula), bio.GESTACION_DIAS)
 }
 
 // ─── CONTROL DE MACHOS ───────────────────────────────────────────────────────
