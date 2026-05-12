@@ -1,18 +1,146 @@
+import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useBioterio } from '../context/BiotheriumContextPro'
 import { useEspecie } from '../context/EspecieContext'
 import {
   LayoutDashboard, Printer, Dna, RefreshCw, BookOpen, Wheat, Layers,
+  Microscope, Archive, BarChart2, ChevronDown,
+  PackageCheck, Skull, TrendingUp,
 } from 'lucide-react'
 import GenERatsBrand from './GenERatsBrand'
 
+// ── Links simples ─────────────────────────────────────────────────────────────
 const NAV_LINKS = [
-  { to: '/',          label: 'Panel de hoy',    icon: <LayoutDashboard size={15} /> },
+  { to: '/',          label: 'Panel de hoy',     icon: <LayoutDashboard size={15} /> },
+]
+
+// ── Grupos con submenús ───────────────────────────────────────────────────────
+const NAV_GRUPOS = [
+  {
+    to: '/animales',
+    label: 'Reproductores',
+    icon: <Microscope size={15} />,
+    color: '#ce93d8',
+    hijos: [
+      { to: '/camadas', label: 'Emparejamientos', icon: <Dna size={13} /> },
+    ],
+  },
+  {
+    to: '/stock',
+    label: 'Stock',
+    icon: <Archive size={15} />,
+    color: '#40c4ff',
+    hijos: [
+      { to: '/entregas',    label: 'Entregas',    icon: <PackageCheck size={13} /> },
+      { to: '/sacrificios', label: 'Sacrificios', icon: <Skull size={13} /> },
+    ],
+  },
+  {
+    to: '/rendimiento',
+    label: 'Rendimiento',
+    icon: <BarChart2 size={15} />,
+    color: '#ff9800',
+    hijos: [
+      { to: '/estadisticas', label: 'Estadísticas', icon: <TrendingUp size={13} /> },
+    ],
+  },
+]
+
+// ── Links simples al final ────────────────────────────────────────────────────
+const NAV_LINKS_FINAL = [
   { to: '/alimento',  label: 'Consumo alimento', icon: <Wheat size={15} /> },
   { to: '/viruta',    label: 'Consumo viruta',   icon: <Layers size={15} /> },
   { to: '/reportes',  label: 'Reportes',         icon: <Printer size={15} /> },
   { to: '/tutorial',  label: 'Tutorial',         icon: <BookOpen size={15} /> },
 ]
+
+// ── Estilos comunes ───────────────────────────────────────────────────────────
+const styleActivo = {
+  display: 'flex', alignItems: 'center', gap: '10px',
+  padding: '8px 12px', borderRadius: '10px',
+  background: 'rgba(0,230,118,0.12)',
+  color: '#00e676',
+  border: '1px solid rgba(0,230,118,0.25)',
+  boxShadow: '0 0 12px rgba(0,230,118,0.1)',
+  fontSize: '13px', fontWeight: 600, textDecoration: 'none',
+}
+const styleInactivo = {
+  display: 'flex', alignItems: 'center', gap: '10px',
+  padding: '8px 12px', borderRadius: '10px',
+  color: '#8a9bb0',
+  border: '1px solid transparent',
+  fontSize: '13px', fontWeight: 500, textDecoration: 'none',
+}
+
+// ── Componente grupo acordeón ─────────────────────────────────────────────────
+function NavGrupo({ grupo, onCerrarMenu }) {
+  const [abierto, setAbierto] = useState(false)
+
+  return (
+    <div>
+      {/* Fila principal: link al padre + botón toggle */}
+      <div className="flex items-center rounded-xl overflow-hidden"
+        style={{ border: '1px solid transparent' }}
+      >
+        <NavLink
+          to={grupo.to}
+          onClick={onCerrarMenu}
+          className="flex-1"
+          style={({ isActive }) => isActive
+            ? { ...styleActivo, borderRadius: '10px 0 0 10px', border: 'none', boxShadow: 'none', background: 'rgba(0,230,118,0.12)' }
+            : { ...styleInactivo, borderRadius: '10px 0 0 10px', border: 'none' }
+          }
+        >
+          <span style={{ width: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {grupo.icon}
+          </span>
+          {grupo.label}
+        </NavLink>
+        <button
+          onClick={() => setAbierto(v => !v)}
+          className="flex items-center justify-center shrink-0"
+          style={{
+            width: '32px', height: '34px',
+            background: abierto ? `${grupo.color}15` : 'transparent',
+            border: 'none',
+            color: abierto ? grupo.color : '#4a5f7a',
+            cursor: 'pointer',
+            borderRadius: '0 10px 10px 0',
+          }}
+        >
+          <ChevronDown
+            size={13}
+            style={{ transition: 'transform 0.2s', transform: abierto ? 'rotate(180deg)' : 'rotate(0deg)' }}
+          />
+        </button>
+      </div>
+
+      {/* Sublinks */}
+      {abierto && (
+        <div className="ml-4 mt-0.5 space-y-0.5 pl-3"
+          style={{ borderLeft: `1px solid ${grupo.color}30` }}
+        >
+          {grupo.hijos.map(hijo => (
+            <NavLink
+              key={hijo.to}
+              to={hijo.to}
+              onClick={onCerrarMenu}
+              style={({ isActive }) => isActive
+                ? { ...styleActivo, padding: '6px 10px', fontSize: '12px' }
+                : { ...styleInactivo, padding: '6px 10px', fontSize: '12px', color: '#6a8099' }
+              }
+            >
+              <span style={{ width: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: grupo.color }}>
+                {hijo.icon}
+              </span>
+              {hijo.label}
+            </NavLink>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function Sidebar({ onCerrarMenu }) {
   const { animales, camadas, bio } = useBioterio()
@@ -113,31 +241,36 @@ export default function Sidebar({ onCerrarMenu }) {
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 pb-3 space-y-0.5">
+        {/* Links simples (Panel de hoy) */}
         {NAV_LINKS.map(({ to, label, icon }) => (
           <NavLink
             key={to}
             to={to}
             end={to === '/'}
             onClick={onCerrarMenu}
-            style={({ isActive }) =>
-              isActive
-                ? {
-                    display: 'flex', alignItems: 'center', gap: '10px',
-                    padding: '8px 12px', borderRadius: '10px',
-                    background: 'rgba(0,230,118,0.12)',
-                    color: '#00e676',
-                    border: '1px solid rgba(0,230,118,0.25)',
-                    boxShadow: '0 0 12px rgba(0,230,118,0.1)',
-                    fontSize: '13px', fontWeight: 600, textDecoration: 'none',
-                  }
-                : {
-                    display: 'flex', alignItems: 'center', gap: '10px',
-                    padding: '8px 12px', borderRadius: '10px',
-                    color: '#8a9bb0',
-                    border: '1px solid transparent',
-                    fontSize: '13px', fontWeight: 500, textDecoration: 'none',
-                  }
-            }
+            style={({ isActive }) => isActive ? styleActivo : styleInactivo}
+          >
+            <span style={{ width: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{icon}</span>
+            {label}
+          </NavLink>
+        ))}
+
+        {/* Grupos con submenús */}
+        {NAV_GRUPOS.map(grupo => (
+          <NavGrupo key={grupo.to} grupo={grupo} onCerrarMenu={onCerrarMenu} />
+        ))}
+
+        {/* Separador */}
+        <div style={{ height: '1px', background: 'rgba(30,51,82,0.6)', margin: '6px 4px' }} />
+
+        {/* Links finales */}
+        {NAV_LINKS_FINAL.map(({ to, label, icon }) => (
+          <NavLink
+            key={to}
+            to={to}
+            end
+            onClick={onCerrarMenu}
+            style={({ isActive }) => isActive ? styleActivo : styleInactivo}
           >
             <span style={{ width: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{icon}</span>
             {label}
