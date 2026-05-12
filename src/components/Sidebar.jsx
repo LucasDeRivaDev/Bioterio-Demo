@@ -47,9 +47,12 @@ const NAV_GRUPOS = [
 ]
 
 // ── Links simples al final ────────────────────────────────────────────────────
-const NAV_LINKS_FINAL = [
+const NAV_LINKS_CONSUMO = [
   { to: '/alimento',  label: 'Consumo alimento', icon: <Wheat size={15} /> },
   { to: '/viruta',    label: 'Consumo viruta',   icon: <Layers size={15} /> },
+]
+
+const NAV_LINKS_FINAL = [
   { to: '/reportes',  label: 'Reportes',         icon: <Printer size={15} /> },
   { to: '/tutorial',  label: 'Tutorial',         icon: <BookOpen size={15} /> },
 ]
@@ -276,7 +279,24 @@ export default function Sidebar({ onCerrarMenu }) {
         {/* Separador */}
         <div style={{ height: '1px', background: 'rgba(30,51,82,0.6)', margin: '6px 4px' }} />
 
-        {/* Links finales */}
+        {/* Consumo alimento y viruta */}
+        {NAV_LINKS_CONSUMO.map(({ to, label, icon }) => (
+          <NavLink
+            key={to}
+            to={to}
+            end
+            onClick={onCerrarMenu}
+            style={({ isActive }) => isActive ? styleActivo : styleInactivo}
+          >
+            <span style={{ width: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{icon}</span>
+            {label}
+          </NavLink>
+        ))}
+
+        {/* Separador */}
+        <div style={{ height: '1px', background: 'rgba(30,51,82,0.6)', margin: '6px 4px' }} />
+
+        {/* Reportes y Tutorial */}
         {NAV_LINKS_FINAL.map(({ to, label, icon }) => (
           <NavLink
             key={to}
