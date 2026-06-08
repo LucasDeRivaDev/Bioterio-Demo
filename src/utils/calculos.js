@@ -1,4 +1,5 @@
 import { BIO, MAX_APAREAMIENTOS, MACHO_EDAD_LIMITE_DIAS, MACHO_EDAD_ALERTA_DIAS } from './constants'
+import { getAnimalesReservadosDB, getJaulasReservadasDB, getReservadosParaHibridosDB } from './db'
 
 // Sumar días a una fecha (retorna Date)
 export function sumarDias(fecha, dias) {
@@ -127,6 +128,28 @@ export function interpretarLatencia(dias) {
 // ─── MÉTRICAS DE RENDIMIENTO MACHO ───────────────────────────────────────────
 
 /**
+ * Analiza la tendencia del tamaño de camada comparando primera mitad vs segunda mitad
+ * del historial ordenado cronológicamente.
+ * Requiere al menos 3 camadas con total_crias registrado.
+ * Retorna: 'mejorando' | 'estable' | 'disminuyendo' | null
+ */
+export function calcularTendenciaTamanoCamadas(historial) {
+  const conDatos = historial
+    .filter((c) => c.total_crias != null)
+    .sort((a, b) => (a.fecha_copula ?? '').localeCompare(b.fecha_copula ?? ''))
+  if (conDatos.length < 3) return null
+  const mitad    = Math.floor(conDatos.length / 2)
+  const primeras = conDatos.slice(0, mitad)
+  const ultimas  = conDatos.slice(-mitad)
+  const avgPrim  = primeras.reduce((s, c) => s + c.total_crias, 0) / primeras.length
+  const avgUlt   = ultimas.reduce((s, c)  => s + c.total_crias, 0) / ultimas.length
+  const diff = avgUlt - avgPrim
+  if (diff > 1.5)  return 'mejorando'
+  if (diff < -1.5) return 'disminuyendo'
+  return 'estable'
+}
+
+/**
  * Asigna un score discreto a una latencia de fertilización.
  * Reglas:
  *   0–5 días  → 10 (fecundación inmediata o 1er ciclo, óptimo)
@@ -164,6 +187,10 @@ export function calcularRendimientoMacho(machoId, camadas) {
       max_latencia: null,
       score_promedio: null,
       score: null,
+      avg_litter_score: null,
+      avg_litter_size: null,
+      tendencia_camada: null,
+      score_total: null,
     }
   }
 
@@ -183,6 +210,27 @@ export function calcularRendimientoMacho(machoId, camadas) {
       ? Math.round(scores_individuales.reduce((a, b) => a + b, 0) / scores_individuales.length * 10) / 10
       : null
 
+  // Calidad promedio de camadas
+  const litterScores = camadasMacho
+    .map((c) => scoreTamanoCamada(c.total_crias))
+    .filter((s) => s !== null)
+
+  const avg_litter_score = litterScores.length > 0
+    ? Math.round(litterScores.reduce((a, b) => a + b, 0) / litterScores.length * 10) / 10
+    : null
+
+  const criasPorCamada = camadasMacho.map((c) => c.total_crias).filter((v) => v != null)
+  const avg_litter_size = criasPorCamada.length > 0
+    ? Math.round(criasPorCamada.reduce((a, b) => a + b, 0) / criasPorCamada.length * 10) / 10
+    : null
+
+  const tendencia_camada = calcularTendenciaTamanoCamadas(camadasMacho)
+
+  // Score total = score latencia (0–10) + score camada (0–10) → máx 20
+  const score_total = (score_promedio !== null || avg_litter_score !== null)
+    ? Math.round(((score_promedio ?? 0) + (avg_litter_score ?? 0)) * 10) / 10
+    : null
+
   return {
     machoId,
     total_camadas: camadasMacho.length,
@@ -192,7 +240,11 @@ export function calcularRendimientoMacho(machoId, camadas) {
     min_latencia: latencias.length > 0 ? Math.min(...latencias) : null,
     max_latencia: latencias.length > 0 ? Math.max(...latencias) : null,
     score_promedio,
-    score: score_promedio, // alias para compatibilidad
+    score: score_promedio,
+    avg_litter_score,
+    avg_litter_size,
+    tendencia_camada,
+    score_total,
   }
 }
 
@@ -344,7 +396,8 @@ export function generarTareas(camadas, animales, bio = BIO) {
     }
   })
 
-  // 6. Fin de ciclo reproductivo: hembra con MAX_APAREAMIENTOS apareamientos y último ya destetado
+  // 6. Fin de ciclo reproductivo: hembra con MAX_APAREAMIENTOS apareamientos
+  //    Solo notificar DESPUÉS del destete de la última (3°) camada — no antes
   const hembraIds = [...new Set(camadas.filter((c) => c.id_madre).map((c) => c.id_madre))]
   hembraIds.forEach((hembraId) => {
     const madre = animales.find((a) => a.id === hembraId)
@@ -354,20 +407,22 @@ export function generarTareas(camadas, animales, bio = BIO) {
     const camadasMadre = camadas.filter((c) => c.id_madre === hembraId)
     if (camadasMadre.length < MAX_APAREAMIENTOS) return
 
-    // La última camada debe estar destetada para que el ciclo esté "completo"
-    const ultimaDestetada = camadasMadre
-      .filter((c) => c.fecha_destete)
-      .sort((a, b) => b.fecha_destete.localeCompare(a.fecha_destete))[0]
-    if (!ultimaDestetada) return
+    // Tomar la camada MÁS RECIENTE (por fecha_copula) — esa es la que define si el ciclo terminó
+    const ultimaCamada = [...camadasMadre]
+      .sort((a, b) => (b.fecha_copula ?? '').localeCompare(a.fecha_copula ?? ''))[0]
+
+    // Si la última camada todavía NO tiene destete → hembra en último ciclo (en curso)
+    // El recordatorio de sacrificio se genera solo cuando el destete ya ocurrió
+    if (!ultimaCamada?.fecha_destete) return
 
     const nombreMadre = madre.codigo
     tareas.push({
       id: `fin-ciclo-${hembraId}`,
       tipo: 'fin_ciclo',
       prioridad: 'vencida',
-      fecha: ultimaDestetada.fecha_destete,
+      fecha: ultimaCamada.fecha_destete,
       descripcion: `Fin de ciclo reproductivo — ${nombreMadre}`,
-      detalle: `${camadasMadre.length} apareamientos completados (máx. ${MAX_APAREAMIENTOS}). Recomendada para sacrificio.`,
+      detalle: `${camadasMadre.length} ciclos completados (máx. ${MAX_APAREAMIENTOS}). Crías destetadas — hembra lista para descarte.`,
       madreId: hembraId,
     })
   })
@@ -692,29 +747,26 @@ export function getProbabilidadReceptividad(animalId, extendidos) {
   return { probabilidad: 30, razon: est || 'Desconocido' }
 }
 
-export function getDiaGestacional(animal, bio = BIO) {
-  if (!animal.fecha_copula || !animal.en_cria) return 0
-  return Math.max(0, difDias(parseDate(animal.fecha_copula), parseDate(hoy())))
+export function getDiaGestacional(animal) {
+  if (!animal.preanada || !animal.fecha_copula) return 0
+  return Math.max(0, difDias(animal.fecha_copula, hoy()))
 }
 
-export function getAlertasGestacion(animal, bio = BIO) {
+export function getAlertasGestacion(animal) {
   const alerts = []
-  if (!animal.en_cria || !animal.fecha_copula) return alerts
-  const dia = getDiaGestacional(animal, bio)
-  const gestacion = bio.GESTACION_DIAS
-  const umbralAviso = Math.round(gestacion * 0.85)
-  const umbralProximo = Math.round(gestacion * 0.95)
-  if (dia === umbralAviso) alerts.push({ tipo: 'info', mensaje: `Día ${dia} de gestación` })
-  if (dia === umbralProximo) alerts.push({ tipo: 'warning', mensaje: `Día ${dia} - parto pronto` })
-  const resto = gestacion - dia
+  if (!animal.preanada) return alerts
+  const dia = getDiaGestacional(animal)
+  if (dia === 18) alerts.push({ tipo: 'info', mensaje: 'Día 18 de gestación' })
+  if (dia === 21) alerts.push({ tipo: 'warning', mensaje: 'Día 21 - parto pronto' })
+  const resto = BIO.GESTACION_DIAS - dia
   if (resto === 5) alerts.push({ tipo: 'info', mensaje: `Parto en ${resto} días` })
   if (resto <= 0) alerts.push({ tipo: 'error', mensaje: 'Parto vencido' })
   return alerts
 }
 
-export function getFechaPartoEsperado(fechaCopula, bio = BIO) {
+export function getFechaPartoEsperado(fechaCopula) {
   if (!fechaCopula) return null
-  return sumarDias(parseDate(fechaCopula), bio.GESTACION_DIAS)
+  return sumarDias(parseDate(fechaCopula), BIO.GESTACION_DIAS)
 }
 
 // ─── CONTROL DE MACHOS ───────────────────────────────────────────────────────
@@ -1005,6 +1057,22 @@ export function calcularGestacionEstral(extendidos, bio = BIO) {
 /**
  * Genera alertas de ciclo estral y gestación para el Dashboard.
  */
+/**
+ * Devuelve un Map<animalId, { fecha }> de reproductores en planes activos futuros.
+ * Lee desde el cache en memoria (cargado desde Supabase al iniciar).
+ */
+export function getAnimalesReservados(bioterioActivo) {
+  return getAnimalesReservadosDB(bioterioActivo)
+}
+
+export function getJaulasReservadas(bioterioActivo) {
+  return getJaulasReservadasDB(bioterioActivo)
+}
+
+export function getReservadosParaHibridos(bioterioId) {
+  return getReservadosParaHibridosDB(bioterioId)
+}
+
 export function generarAlertasEstrales(animales, extendidos, bio = BIO) {
   const alertas = []
   const hembrasActivas = animales.filter(
@@ -1050,4 +1118,22 @@ export function generarAlertasEstrales(animales, extendidos, bio = BIO) {
   }
 
   return alertas
+}
+
+// ── Estado de ciclo reproductivo de una hembra ───────────────────────────────
+// Retorna: 'normal' | 'ultimo_ciclo' | 'fin_ciclo'
+//   normal      → menos de MAX_APAREAMIENTOS camadas
+//   ultimo_ciclo → tiene MAX_APAREAMIENTOS camadas pero la última NO tiene destete todavía
+//                  (todavía en apareamiento / preñada / lactando)
+//   fin_ciclo   → tiene MAX_APAREAMIENTOS camadas Y la última ya fue destetada
+//                  (ciclo completo — recomendar sacrificio)
+export function getEstadoCicloHembra(hembraId, camadasTodas) {
+  const camadasMadre = camadasTodas.filter((c) => c.id_madre === hembraId)
+  if (camadasMadre.length < MAX_APAREAMIENTOS) return 'normal'
+
+  const ultimaCamada = [...camadasMadre]
+    .sort((a, b) => (b.fecha_copula ?? '').localeCompare(a.fecha_copula ?? ''))[0]
+
+  if (ultimaCamada?.fecha_destete) return 'fin_ciclo'
+  return 'ultimo_ciclo'
 }

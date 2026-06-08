@@ -1,10 +1,13 @@
 import { useState, useMemo } from 'react'
 import { useBioterio } from '../context/BiotheriumContext'
-import { difDias, parseDate, hoy, formatFecha, calcularPerfilHembra, calcularRendimientoMacho } from '../utils/calculos'
+import { difDias, parseDate, hoy, formatFecha, calcularPerfilHembra, calcularRendimientoMacho, getAnimalesReservados, getJaulasReservadas, getReservadosParaHibridos, getEstadoCicloHembra } from '../utils/calculos'
+import { generarId } from '../utils/storage'
+import { guardarPlan, eliminarPlan, getPlanes } from '../utils/db'
 import Modal from '../components/Modal'
 import { TestTube2, FlaskConical, Microscope, UserPlus } from 'lucide-react'
 import Sacrificios from '../pages/Sacrificios'
 import Entregas from '../pages/Entregas'
+import { useTheme } from '../context/ThemeContext'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -31,25 +34,39 @@ function formatEdad(dias) {
   return `${Math.floor(dias / 30)}m`
 }
 
-// ── Configuración de categorías ───────────────────────────────────────────────
+// Orden fijo de categorías para visualización del stock
+const ORDEN_CAT = ['hembra_repro', 'macho_repro', 'crias', 'jovenes', 'adultos']
 
-const CAT = {
-  macho_repro:  { label: 'Macho reproductor',  color: '#40c4ff', bg: 'rgba(64,196,255,0.1)',   borde: 'rgba(64,196,255,0.3)',   icono: '🐀' },
-  hembra_repro: { label: 'Hembra reproductora', color: '#ce93d8', bg: 'rgba(206,147,216,0.1)',  borde: 'rgba(206,147,216,0.3)', icono: '🐀' },
-  crias:        { label: 'Crías',               color: '#00e676', bg: 'rgba(0,230,118,0.08)',   borde: 'rgba(0,230,118,0.25)',  icono: '🐣' },
-  jovenes:      { label: 'Jóvenes',             color: '#ffb300', bg: 'rgba(255,179,0,0.08)',   borde: 'rgba(255,179,0,0.25)',  icono: '🐭' },
-  adultos:      { label: 'Adultos',             color: '#ff6b80', bg: 'rgba(255,61,87,0.08)',   borde: 'rgba(255,61,87,0.25)', icono: '🐁' },
-}
-
-function categoriaStock(edad, bio) {
+function categoriaStock(edad, adultosDias) {
   if (edad < 42) return 'crias'
-  if (edad < bio.MADUREZ_DIAS) return 'jovenes'
+  if (edad < adultosDias) return 'jovenes'
   return 'adultos'
 }
+
+// True si es una hembra reproductora que está actualmente en período de apareamiento
+function esFemEnApareamiento(b) {
+  return b.tipo === 'reproductor' && b.animal?.sexo === 'hembra' && b.animal?.estado === 'en_apareamiento'
+}
+
+// Determina el sexo de un bloque para la planificación de apareamientos
+function sexoBloque(b) {
+  if (b.categoria === 'macho_repro') return 'macho'
+  if (b.categoria === 'hembra_repro') return 'hembra'
+  if (b.tipo === 'stock') {
+    const m = b.machos
+    const h = b.hembras
+    if (m != null && m > 0 && (h == null || h === 0)) return 'macho'
+    if (h != null && h > 0 && (m == null || m === 0)) return 'hembra'
+  }
+  return null
+}
+
+// helpers LS eliminados — ahora usa db.js
 
 // ── Componentes ───────────────────────────────────────────────────────────────
 
 function ChipCategoria({ label, animales, jaulas, color }) {
+  const { tema } = useTheme()
   return (
     <div
       className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-mono"
@@ -57,7 +74,7 @@ function ChipCategoria({ label, animales, jaulas, color }) {
     >
       <span style={{ color, opacity: 0.7 }}>{label}</span>
       <span className="font-bold" style={{ color }}>{animales}</span>
-      <span style={{ color: '#4a5f7a' }}>({jaulas})</span>
+      <span style={{ color: tema.textMuted }}>({jaulas})</span>
     </div>
   )
 }
@@ -66,7 +83,8 @@ const COLOR_MACHO  = '#40c4ff'
 const COLOR_HEMBRA = '#ce93d8'
 
 function SexoDisplay({ bloque, cfg }) {
-  const { tipo, animal, machos, hembra, total } = bloque
+  const { tema } = useTheme()
+  const { tipo, animal, machos, hembras, total } = bloque
 
   if (tipo === 'reproductor') {
     const esMacho = animal.sexo === 'macho'
@@ -80,27 +98,27 @@ function SexoDisplay({ bloque, cfg }) {
   }
 
   // Jaula de stock — ambos sexos conocidos
-  if (machos != null && hembra != null) {
+  if (machos != null && hembras != null) {
     if (machos === 0) {
       return (
         <div className="flex items-center gap-1 text-xs font-mono font-semibold">
-          <span style={{ color: COLOR_HEMBRA }}>{cfg.icono} {hembra}{hembra === 1 ? 'Hembra' : 'Hembras'}</span>
+          <span style={{ color: COLOR_HEMBRA }}>{cfg.icono} {hembras} {hembras === 1 ? 'Hembra' : 'Hembras'}</span>
         </div>
       )
     }
-    if (hembra === 0) {
+    if (hembras === 0) {
       return (
         <div className="flex items-center gap-1 text-xs font-mono font-semibold">
-          <span style={{ color: COLOR_MACHO }}>{cfg.icono} {machos}{machos === 1 ? 'Macho' : 'Machos'}</span>
+          <span style={{ color: COLOR_MACHO }}>{cfg.icono} {machos} {machos === 1 ? 'Macho' : 'Machos'}</span>
         </div>
       )
     }
     return (
       <div className="flex items-center gap-1 text-xs font-mono font-semibold">
         <span style={{ color: COLOR_MACHO }}>{cfg.icono}{machos}M</span>
-        <span style={{ color: '#4a5f7a' }}>/</span>
-        <span style={{ color: COLOR_HEMBRA }}>{cfg.icono}{hembra}H</span>
-        <span style={{ color: '#4a5f7a', fontWeight: 400 }}>= {total}</span>
+        <span style={{ color: tema.textMuted }}>/</span>
+        <span style={{ color: COLOR_HEMBRA }}>{cfg.icono}{hembras}H</span>
+        <span style={{ color: tema.textMuted, fontWeight: 400 }}>= {total}</span>
       </div>
     )
   }
@@ -110,19 +128,19 @@ function SexoDisplay({ bloque, cfg }) {
     return (
       <div className="flex items-center gap-1 text-xs font-mono font-semibold">
         <span style={{ color: COLOR_MACHO }}>{cfg.icono}{machos}M</span>
-        <span style={{ color: '#4a5f7a' }}>/</span>
+        <span style={{ color: tema.textMuted }}>/</span>
         <span style={{ color: COLOR_HEMBRA }}>{cfg.icono}?</span>
-        <span style={{ color: '#4a5f7a', fontWeight: 400 }}>= {total}</span>
+        <span style={{ color: tema.textMuted, fontWeight: 400 }}>= {total}</span>
       </div>
     )
   }
-  if (hembra != null) {
+  if (hembras != null) {
     return (
       <div className="flex items-center gap-1 text-xs font-mono font-semibold">
         <span style={{ color: COLOR_MACHO }}>{cfg.icono}?</span>
-        <span style={{ color: '#4a5f7a' }}>/</span>
-        <span style={{ color: COLOR_HEMBRA }}>{cfg.icono}{hembra}H</span>
-        <span style={{ color: '#4a5f7a', fontWeight: 400 }}>= {total}</span>
+        <span style={{ color: tema.textMuted }}>/</span>
+        <span style={{ color: COLOR_HEMBRA }}>{cfg.icono}{hembras}H</span>
+        <span style={{ color: tema.textMuted, fontWeight: 400 }}>= {total}</span>
       </div>
     )
   }
@@ -133,7 +151,7 @@ function SexoDisplay({ bloque, cfg }) {
       <div className="text-xs font-mono font-semibold" style={{ color: cfg.color }}>
         {total} {total === 1 ? 'animal' : 'animales'}
       </div>
-      <div className="text-xs" style={{ color: '#4a5f7a' }}>sexo sin registrar</div>
+      <div className="text-xs" style={{ color: tema.textMuted }}>sexo sin registrar</div>
     </div>
   )
 }
@@ -166,25 +184,71 @@ function MiniCalidad({ icono, codigo, calidad, animal }) {
   )
 }
 
-function BloqueJaula({ bloque, camadas, onClick, modoSeleccion = false, seleccionada = false }) {
+function BloqueJaula({ bloque, camadas, onClick, onEliminar, modoSeleccion = false, seleccionada = false, animalesReservados = new Map(), jaulasReservadas = new Map(), reservadosHibridos = new Map() }) {
   const cfg = CAT[bloque.categoria]
-  const esSeleccionable = modoSeleccion && !bloque.virtual
   const esStock = bloque.tipo === 'stock'
+  // Estado de ciclo reproductivo — solo para hembras reproductoras
+  const estadoCicloHembra = (bloque.tipo === 'reproductor' && bloque.animal?.sexo === 'hembra' && camadas)
+    ? getEstadoCicloHembra(bloque.animal.id, camadas)
+    : 'normal'
+
+  // Hembra en período de apareamiento → jaula temporalmente vacía
+  const esEnApareamiento = esFemEnApareamiento(bloque)
+  const esSeleccionable  = modoSeleccion && !bloque.virtual && !esEnApareamiento
+
+  // Colores efectivos: gris apagado para hembras en apareamiento
+  const cfgEfectivo = esEnApareamiento
+    ? { ...cfg, color: '#3d5068', bg: 'rgba(30,51,82,0.04)', borde: 'rgba(30,51,82,0.35)' }
+    : cfg
 
   const calMadre = esStock && bloque.madre && camadas ? calidadHembra(bloque.madre.id, camadas) : null
   const calPadre = esStock && bloque.padre && camadas ? calidadMacho(bloque.padre.id, camadas)  : null
   const mostrarCalidad = esStock && (bloque.madre || bloque.padre)
 
+  // Reserva de apareamiento — reproductores individuales
+  const reserva = bloque.tipo === 'reproductor' && bloque.animal
+    ? animalesReservados.get(bloque.animal.id) ?? null
+    : null
+
+  // Reserva de apareamiento — jaulas/bloques de stock
+  const reservaJaula = bloque.tipo === 'stock'
+    ? jaulasReservadas.get(bloque.id) ?? null
+    : null
+
+  // Reserva para cruce F1 en Híbridos (solo visible en BALB/C y C57)
+  const reservaF1 = bloque.tipo === 'reproductor' && bloque.animal
+    ? reservadosHibridos.get(`r-${bloque.animal.id}`) ?? null
+    : bloque.tipo === 'stock'
+    ? reservadosHibridos.get(bloque.id) ?? null
+    : null
+
   return (
+    <div style={{ position: 'relative' }}>
+
+    {/* Botón X para eliminar jaula — solo para bloques de stock, fuera del modo selección */}
+    {onEliminar && esStock && !modoSeleccion && !esEnApareamiento && (
+      <div
+        style={{ position: 'absolute', top: 4, right: 4, zIndex: 20 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          onClick={() => onEliminar(bloque)}
+          title="Eliminar jaula"
+          className="w-5 h-5 rounded flex items-center justify-center text-xs font-bold transition-all hover:scale-110"
+          style={{ background: 'rgba(30,51,82,0.7)', border: '1px solid rgba(30,51,82,0.9)', color: tema.textMuted, cursor: 'pointer' }}
+        >✕</button>
+      </div>
+    )}
+
     <button
       onClick={() => onClick(bloque)}
       disabled={false}
       className="rounded-xl overflow-hidden text-left w-full transition-all hover:scale-[1.02] active:scale-[0.98]"
       style={{
-        background: seleccionada ? 'rgba(255,61,87,0.08)' : 'rgba(13,21,40,0.9)',
-        border: seleccionada ? '2px solid rgba(255,61,87,0.7)' : `1px solid ${cfg.borde}`,
-        boxShadow: seleccionada ? '0 0 16px rgba(255,61,87,0.15)' : `0 0 12px ${cfg.bg}`,
-        opacity: modoSeleccion && !esSeleccionable ? 0.35 : 1,
+        background: seleccionada ? 'rgba(255,61,87,0.08)' : tema.bgCard,
+        border: seleccionada ? '2px solid rgba(255,61,87,0.7)' : `1px solid ${cfgEfectivo.borde}`,
+        boxShadow: seleccionada ? '0 0 16px rgba(255,61,87,0.15)' : `0 0 8px ${cfgEfectivo.bg}`,
+        opacity: esEnApareamiento ? 0.6 : (modoSeleccion && !esSeleccionable ? 0.35 : 1),
         position: 'relative',
         cursor: modoSeleccion && !esSeleccionable ? 'default' : 'pointer',
       }}
@@ -195,7 +259,7 @@ function BloqueJaula({ bloque, camadas, onClick, modoSeleccion = false, seleccio
           className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold z-10"
           style={seleccionada
             ? { background: '#ff6b80', color: '#050810' }
-            : { border: '2px solid rgba(255,61,87,0.4)', background: 'rgba(5,8,16,0.6)' }}
+            : { border: '2px solid rgba(255,61,87,0.4)', background: tema.bgCard }}
         >
           {seleccionada && '✓'}
         </div>
@@ -204,14 +268,29 @@ function BloqueJaula({ bloque, camadas, onClick, modoSeleccion = false, seleccio
       {/* Header coloreado */}
       <div
         className="px-3 py-1.5 flex items-center justify-between"
-        style={{ background: cfg.bg, borderBottom: `1px solid ${cfg.borde}` }}
+        style={{ background: cfgEfectivo.bg, borderBottom: `1px solid ${cfgEfectivo.borde}` }}
       >
-        <span className="text-xs font-bold uppercase tracking-widest" style={{ color: cfg.color }}>
+        <span className="text-xs font-bold uppercase tracking-widest" style={{ color: cfgEfectivo.color }}>
           {cfg.icono} {cfg.label}
         </span>
         {bloque.virtual && (
-          <span className="text-xs px-1.5 py-0.5 rounded font-semibold" style={{ background: 'rgba(255,179,0,0.2)', color: '#ffb300' }}>
+          <span className="text-xs px-1.5 py-0.5 rounded font-semibold" style={{ background: 'rgba(255,179,0,0.2)', color: tema.amber }}>
             sin asignar
+          </span>
+        )}
+        {esEnApareamiento && (
+          <span className="text-xs px-1.5 py-0.5 rounded font-semibold" style={{ background: 'rgba(30,51,82,0.4)', color: '#3d5068' }}>
+            En apareamiento
+          </span>
+        )}
+        {estadoCicloHembra === 'ultimo_ciclo' && (
+          <span className="text-xs px-1.5 py-0.5 rounded font-semibold" style={{ background: 'rgba(255,179,0,0.18)', border: '1px solid rgba(255,179,0,0.4)', color: tema.amber }}>
+            🟡 Último ciclo
+          </span>
+        )}
+        {estadoCicloHembra === 'fin_ciclo' && (
+          <span className="text-xs px-1.5 py-0.5 rounded font-semibold" style={{ background: 'rgba(255,61,87,0.12)', border: '1px solid rgba(255,61,87,0.35)', color: tema.red }}>
+            🔚 Fin de ciclo
           </span>
         )}
       </div>
@@ -229,16 +308,96 @@ function BloqueJaula({ bloque, camadas, onClick, modoSeleccion = false, seleccio
               )}
             </>
           ) : (
-            <span className="text-white">
-              {bloque.madre?.codigo ?? '?'} × {bloque.padre?.codigo ?? '?'}
-            </span>
+            <div className="space-y-0.5">
+              {bloque.madre ? (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-bold" style={{ color: tema.purple }}>♀</span>
+                  <span className="font-mono text-sm text-white">{bloque.madre.codigo}</span>
+                  {bloque.madre.bioterio_id === 'ratones_balbc' && (
+                    <span className="text-xs px-1 rounded font-semibold" style={{ color: tema.purple, background: 'rgba(206,147,216,0.12)' }}>BAL/C</span>
+                  )}
+                  {bloque.madre.bioterio_id === 'ratones_c57' && (
+                    <span className="text-xs px-1 rounded font-semibold" style={{ color: tema.blue, background: 'rgba(64,196,255,0.12)' }}>C57</span>
+                  )}
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-bold" style={{ color: tema.textMuted }}>♀</span>
+                  <span className="font-mono text-sm" style={{ color: tema.textMuted }}>desconocida</span>
+                </div>
+              )}
+              {bloque.padre ? (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-bold" style={{ color: tema.blue }}>♂</span>
+                  <span className="font-mono text-sm text-white">{bloque.padre.codigo}</span>
+                  {bloque.padre.bioterio_id === 'ratones_balbc' && (
+                    <span className="text-xs px-1 rounded font-semibold" style={{ color: tema.purple, background: 'rgba(206,147,216,0.12)' }}>BAL/C</span>
+                  )}
+                  {bloque.padre.bioterio_id === 'ratones_c57' && (
+                    <span className="text-xs px-1 rounded font-semibold" style={{ color: tema.blue, background: 'rgba(64,196,255,0.12)' }}>C57</span>
+                  )}
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-bold" style={{ color: tema.textMuted }}>♂</span>
+                  <span className="font-mono text-sm" style={{ color: tema.textMuted }}>desconocido</span>
+                </div>
+              )}
+            </div>
           )}
         </div>
 
-        <SexoDisplay bloque={bloque} cfg={cfg} />
-        <div className="text-xs" style={{ color: '#4a5f7a' }}>
+        <SexoDisplay bloque={bloque} cfg={cfgEfectivo} />
+        <div className="text-xs" style={{ color: tema.textMuted }}>
           {bloque.edad != null ? `${formatEdad(bloque.edad)} · ${bloque.edad}d` : '—'}
         </div>
+
+        {/* Badge: reproductor reservado para apareamiento planificado */}
+        {reserva && (() => {
+          const [, m, d] = reserva.fecha.split('-')
+          return (
+            <div
+              className="text-xs px-2 py-1 rounded-lg font-semibold"
+              style={{ background: 'rgba(251,146,60,0.10)', border: '1px solid rgba(251,146,60,0.3)', color: '#fb923c' }}
+            >
+              🗓 Reservado · {d}/{m}
+            </div>
+          )
+        })()}
+
+        {/* Badge: jaula de stock con destino reproductivo planificado */}
+        {reservaJaula && (() => {
+          const [, m, d] = reservaJaula.fecha.split('-')
+          return (
+            <div
+              className="text-xs px-2 py-1 rounded-lg font-semibold"
+              style={{ background: 'rgba(251,146,60,0.10)', border: '1px solid rgba(251,146,60,0.3)', color: '#fb923c' }}
+            >
+              🟡 Destino reproductivo · {d}/{m}
+            </div>
+          )
+        })()}
+
+        {/* Badge: reservado para cruce F1 en Híbridos */}
+        {reservaF1 && (() => {
+          const [, m, d] = reservaF1.fecha.split('-')
+          return (
+            <div
+              className="text-xs px-2 py-1 rounded-lg font-semibold"
+              style={{ background: 'rgba(167,139,250,0.10)', border: '1px solid rgba(167,139,250,0.3)', color: '#a78bfa' }}
+            >
+              🧬 Destino F1 · {d}/{m}
+            </div>
+          )
+        })()}
+
+        {/* Badge de jaula temporalmente vacía */}
+        {esEnApareamiento && (
+          <div className="text-xs px-2 py-1 rounded-lg"
+            style={{ background: 'rgba(30,51,82,0.25)', border: '1px solid rgba(30,51,82,0.5)', color: '#3d5068' }}>
+            Jaula temporalmente vacía
+          </div>
+        )}
 
         {/* Nota visible directamente en la tarjeta */}
         {bloque.tipo === 'reproductor' && bloque.animal.notas && (
@@ -259,7 +418,7 @@ function BloqueJaula({ bloque, camadas, onClick, modoSeleccion = false, seleccio
             style={{
               background: 'rgba(138,155,176,0.07)',
               border: '1px solid rgba(138,155,176,0.2)',
-              color: '#8a9bb0',
+              color: tema.textSecondary,
             }}
           >
             {bloque.jaula.notas.length > 60 ? bloque.jaula.notas.slice(0, 60) + '…' : bloque.jaula.notas}
@@ -278,12 +437,14 @@ function BloqueJaula({ bloque, camadas, onClick, modoSeleccion = false, seleccio
         )}
       </div>
     </button>
+
+    </div>
   )
 }
 
 const labelEstadoRepro = { activo: 'Activo', en_apareamiento: 'En apareamiento', en_cria: 'En cría', retirado: 'Retirado', fallecido: 'Fallecido' }
 
-function JaulaModal({ bloque, jaulas, camadas, animales, onCerrar, editarJaula, agregarJaula, editarAnimal, onPromover }) {
+function JaulaModal({ bloque, jaulas, camadas, animales, onCerrar, editarJaula, agregarJaula, editarAnimal, onPromover, esHibridos }) {
   const cfg       = CAT[bloque.categoria]
   const esRepro   = bloque.tipo === 'reproductor'
   const esVirtual = Boolean(bloque.virtual)
@@ -334,7 +495,7 @@ function JaulaModal({ bloque, jaulas, camadas, animales, onCerrar, editarJaula, 
 
   // ── Estilos comunes ───────────────────────────────────────────────
   const iStyle = {
-    background: 'rgba(5,8,16,0.6)', border: '1px solid rgba(30,51,82,0.8)',
+    background: tema.bgCard, border: '1px solid rgba(30,51,82,0.8)',
     color: '#e2e8f0', borderRadius: '0.5rem', padding: '0.4rem 0.6rem',
     fontSize: '0.8125rem', fontFamily: 'monospace', width: '100%', outline: 'none',
   }
@@ -343,7 +504,7 @@ function JaulaModal({ bloque, jaulas, camadas, animales, onCerrar, editarJaula, 
       key={m} onClick={() => setModo(m)}
       style={modo === m
         ? { background: `${cfg.color}18`, border: `1px solid ${cfg.color}45`, color: cfg.color, borderRadius: '0.5rem', padding: '0.3rem 0.75rem', fontSize: '0.75rem', fontWeight: 600 }
-        : { background: 'transparent', border: '1px solid rgba(30,51,82,0.6)', color: '#4a5f7a', borderRadius: '0.5rem', padding: '0.3rem 0.75rem', fontSize: '0.75rem', fontWeight: 600 }}
+        : { background: 'transparent', border: '1px solid rgba(30,51,82,0.6)', color: tema.textMuted, borderRadius: '0.5rem', padding: '0.3rem 0.75rem', fontSize: '0.75rem', fontWeight: 600 }}
     >{label}</button>
   )
 
@@ -406,10 +567,20 @@ function JaulaModal({ bloque, jaulas, camadas, animales, onCerrar, editarJaula, 
           <span className="text-2xl">{cfg.icono}</span>
           <div>
             <div className="font-bold text-sm" style={{ color: cfg.color }}>{cfg.label}</div>
-            {esVirtual && <div className="text-xs mt-0.5" style={{ color: '#ffb300' }}>Sin distribución asignada</div>}
-            {esRepro   && <div className="text-xs mt-0.5" style={{ color: '#4a5f7a' }}>Reproductor registrado</div>}
+            {esVirtual && <div className="text-xs mt-0.5" style={{ color: tema.amber }}>Sin distribución asignada</div>}
+            {esRepro   && <div className="text-xs mt-0.5" style={{ color: tema.textMuted }}>Reproductor registrado</div>}
           </div>
         </div>
+
+        {/* Aviso F1 en Híbridos */}
+        {esHibridos && !esRepro && (
+          <div
+            className="px-3 py-2 rounded-xl text-xs font-mono flex items-center gap-2"
+            style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid rgba(139,92,246,0.2)', color: '#a78bfa' }}
+          >
+            🧬 Crías F1 — No pueden ser promovidas como reproductores
+          </div>
+        )}
 
         {/* Tabs — solo para jaulas reales */}
         {esReal && (
@@ -454,13 +625,13 @@ function JaulaModal({ bloque, jaulas, camadas, animales, onCerrar, editarJaula, 
                     />
                     {notaTexto.trim() && (
                       <div className="flex items-center gap-2">
-                        <span className="text-xs" style={{ color: '#4a5f7a' }}>Tipo:</span>
+                        <span className="text-xs" style={{ color: tema.textMuted }}>Tipo:</span>
                         {[{ v: 'normal', l: '⚠ Normal', c: '#ffb300' }, { v: 'critica', l: '🔴 Crítica', c: '#ff1744' }].map(({ v, l, c }) => (
                           <button key={v} type="button" onClick={() => setNotaTipo(v)}
                             className="px-2 py-0.5 rounded text-xs font-semibold transition-all"
                             style={notaTipo === v
                               ? { background: `${c}18`, border: `1px solid ${c}55`, color: c }
-                              : { background: 'transparent', border: '1px solid rgba(30,51,82,0.6)', color: '#4a5f7a' }}
+                              : { background: 'transparent', border: '1px solid rgba(30,51,82,0.6)', color: tema.textMuted }}
                           >{l}</button>
                         ))}
                       </div>
@@ -468,12 +639,12 @@ function JaulaModal({ bloque, jaulas, camadas, animales, onCerrar, editarJaula, 
                     <div className="flex gap-2">
                       <button onClick={guardarNotaRepro}
                         className="flex-1 py-1.5 rounded-lg text-xs font-bold"
-                        style={{ background: 'rgba(0,230,118,0.12)', border: '1px solid rgba(0,230,118,0.3)', color: '#00e676' }}>
+                        style={{ background: 'rgba(0,230,118,0.12)', border: '1px solid rgba(0,230,118,0.3)', color: tema.accent }}>
                         ✓ Guardar nota
                       </button>
                       <button onClick={() => { setEditandoNota(false); setNotaTexto(bloque.animal?.notas ?? ''); setNotaTipo(bloque.animal?.nota_tipo ?? 'normal') }}
                         className="px-3 py-1.5 rounded-lg text-xs font-semibold"
-                        style={{ background: 'rgba(138,155,176,0.08)', border: '1px solid rgba(138,155,176,0.2)', color: '#4a5f7a' }}>
+                        style={{ background: 'rgba(138,155,176,0.08)', border: '1px solid rgba(138,155,176,0.2)', color: tema.textMuted }}>
                         Cancelar
                       </button>
                     </div>
@@ -497,7 +668,7 @@ function JaulaModal({ bloque, jaulas, camadas, animales, onCerrar, editarJaula, 
                     )}
                     <button onClick={() => setEditandoNota(true)}
                       className="text-xs font-semibold transition-colors"
-                      style={{ color: '#40c4ff' }}>
+                      style={{ color: tema.blue }}>
                       ✏ {bloque.animal.notas ? 'Editar nota' : 'Agregar nota'}
                     </button>
                   </div>
@@ -538,25 +709,25 @@ function JaulaModal({ bloque, jaulas, camadas, animales, onCerrar, editarJaula, 
         {modo === 'editar' && esReal && (
           <div className="space-y-3">
             <div>
-              <label className="text-xs uppercase tracking-widest font-semibold mb-1 block" style={{ color: '#4a5f7a' }}>Total animales</label>
+              <label className="text-xs uppercase tracking-widest font-semibold mb-1 block" style={{ color: tema.textMuted }}>Total animales</label>
               <input type="number" min="0" value={eTotal} onChange={(e) => setETotal(e.target.value)} style={iStyle} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs uppercase tracking-widest font-semibold mb-1 block" style={{ color: '#40c4ff' }}>♂ Machos</label>
+                <label className="text-xs uppercase tracking-widest font-semibold mb-1 block" style={{ color: tema.blue }}>♂ Machos</label>
                 <input type="number" min="0" placeholder="—" value={eMachos} onChange={(e) => setEMachos(e.target.value)} style={iStyle} />
               </div>
               <div>
-                <label className="text-xs uppercase tracking-widest font-semibold mb-1 block" style={{ color: '#ce93d8' }}>♀ Hembras</label>
+                <label className="text-xs uppercase tracking-widest font-semibold mb-1 block" style={{ color: tema.purple }}>♀ Hembras</label>
                 <input type="number" min="0" placeholder="—" value={eHembras} onChange={(e) => setEHembras(e.target.value)} style={iStyle} />
               </div>
             </div>
             <div>
-              <label className="text-xs uppercase tracking-widest font-semibold mb-1 block" style={{ color: '#4a5f7a' }}>Notas</label>
+              <label className="text-xs uppercase tracking-widest font-semibold mb-1 block" style={{ color: tema.textMuted }}>Notas</label>
               <input type="text" placeholder="—" value={eNotas} onChange={(e) => setENotas(e.target.value)} style={iStyle} />
             </div>
             <button onClick={guardarEdicion} className="w-full py-2 rounded-xl text-sm font-bold"
-              style={{ background: 'rgba(0,230,118,0.12)', border: '1px solid rgba(0,230,118,0.3)', color: '#00e676', cursor: 'pointer' }}>
+              style={{ background: 'rgba(0,230,118,0.12)', border: '1px solid rgba(0,230,118,0.3)', color: tema.accent, cursor: 'pointer' }}>
               Guardar cambios
             </button>
           </div>
@@ -565,20 +736,20 @@ function JaulaModal({ bloque, jaulas, camadas, animales, onCerrar, editarJaula, 
         {/* ── DIVIDIR ─────────────────────────────────────────────── */}
         {modo === 'dividir' && esReal && (
           <div className="space-y-3">
-            <p className="text-xs" style={{ color: '#4a5f7a' }}>
+            <p className="text-xs" style={{ color: tema.textMuted }}>
               Repartí los <span style={{ color: cfg.color, fontWeight: 700 }}>{bloque.total} animales</span> en nuevas jaulas.
               La primera actualiza la actual; las demás se crean nuevas.
             </p>
             {parts.map((p, i) => (
               <div key={i} className="rounded-xl p-3 space-y-2"
-                style={{ background: 'rgba(5,8,16,0.5)', border: '1px solid rgba(30,51,82,0.6)' }}>
+                style={{ background: tema.bgCard, border: '1px solid rgba(30,51,82,0.6)' }}>
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold" style={{ color: i === 0 ? cfg.color : '#8a9bb0' }}>
                     {i === 0 ? 'Jaula actual' : `Nueva jaula ${i}`}
                   </span>
                   {i > 1 && (
                     <button onClick={() => setParts((prev) => prev.filter((_, idx) => idx !== i))}
-                      style={{ color: '#ff6b80', fontSize: '0.7rem', background: 'none', border: 'none', cursor: 'pointer' }}>
+                      style={{ color: tema.red, fontSize: '0.7rem', background: 'none', border: 'none', cursor: 'pointer' }}>
                       ✕ quitar
                     </button>
                   )}
@@ -606,7 +777,7 @@ function JaulaModal({ bloque, jaulas, camadas, animales, onCerrar, editarJaula, 
             </div>
             <button onClick={() => setParts((prev) => [...prev, { total: '0', machos: '', hembras: '' }])}
               className="w-full py-1.5 rounded-lg text-xs font-semibold"
-              style={{ background: 'transparent', border: '1px dashed rgba(30,51,82,0.8)', color: '#4a5f7a', cursor: 'pointer' }}>
+              style={{ background: 'transparent', border: '1px dashed rgba(30,51,82,0.8)', color: tema.textMuted, cursor: 'pointer' }}>
               + Agregar jaula
             </button>
             <button onClick={guardarDividir} disabled={!partsOk} className="w-full py-2 rounded-xl text-sm font-bold"
@@ -619,11 +790,11 @@ function JaulaModal({ bloque, jaulas, camadas, animales, onCerrar, editarJaula, 
         {/* ── MOVER ───────────────────────────────────────────────── */}
         {modo === 'mover' && esReal && jaulasDestino.length > 0 && (
           <div className="space-y-3">
-            <p className="text-xs" style={{ color: '#4a5f7a' }}>
+            <p className="text-xs" style={{ color: tema.textMuted }}>
               Mover animales de esta jaula (<span style={{ color: cfg.color }}>{bloque.total} en total</span>) a otra existente.
             </p>
             <div>
-              <label className="text-xs uppercase tracking-widest font-semibold mb-1 block" style={{ color: '#4a5f7a' }}>Jaula destino</label>
+              <label className="text-xs uppercase tracking-widest font-semibold mb-1 block" style={{ color: tema.textMuted }}>Jaula destino</label>
               <select value={destinoId} onChange={(e) => setDestinoId(e.target.value)} style={{ ...iStyle }}>
                 {jaulasDestino.map((j) => {
                   const c = camadas.find((x) => x.id === j.camada_id)
@@ -636,13 +807,13 @@ function JaulaModal({ bloque, jaulas, camadas, animales, onCerrar, editarJaula, 
               </select>
             </div>
             <div>
-              <label className="text-xs uppercase tracking-widest font-semibold mb-1 block" style={{ color: '#4a5f7a' }}>
+              <label className="text-xs uppercase tracking-widest font-semibold mb-1 block" style={{ color: tema.textMuted }}>
                 Cantidad a mover (máx. {bloque.total})
               </label>
               <input type="number" min="1" max={bloque.total} value={cantMover}
                 onChange={(e) => setCantMover(e.target.value)} style={iStyle} />
               {cantN > bloque.total && (
-                <p className="text-xs mt-1" style={{ color: '#ff6b80' }}>No podés mover más de {bloque.total} animales</p>
+                <p className="text-xs mt-1" style={{ color: tema.red }}>No podés mover más de {bloque.total} animales</p>
               )}
             </div>
             <button onClick={guardarMover} disabled={!moverOk} className="w-full py-2 rounded-xl text-sm font-bold"
@@ -658,7 +829,7 @@ function JaulaModal({ bloque, jaulas, camadas, animales, onCerrar, editarJaula, 
             {/* Sexo + Código */}
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs uppercase tracking-widest font-semibold mb-1 block" style={{ color: '#4a5f7a' }}>Sexo</label>
+                <label className="text-xs uppercase tracking-widest font-semibold mb-1 block" style={{ color: tema.textMuted }}>Sexo</label>
                 <select
                   value={sexoPromover}
                   onChange={(e) => {
@@ -677,7 +848,7 @@ function JaulaModal({ bloque, jaulas, camadas, animales, onCerrar, editarJaula, 
                 </select>
               </div>
               <div>
-                <label className="text-xs uppercase tracking-widest font-semibold mb-1 block" style={{ color: '#4a5f7a' }}>Código</label>
+                <label className="text-xs uppercase tracking-widest font-semibold mb-1 block" style={{ color: tema.textMuted }}>Código</label>
                 <input
                   type="text"
                   value={codigoPromover}
@@ -686,7 +857,7 @@ function JaulaModal({ bloque, jaulas, camadas, animales, onCerrar, editarJaula, 
                   style={{ ...iStyle, borderColor: codigoExiste ? 'rgba(255,61,87,0.5)' : undefined }}
                 />
                 {codigoExiste && (
-                  <p className="text-xs mt-0.5" style={{ color: '#ff6b80' }}>Código ya existe</p>
+                  <p className="text-xs mt-0.5" style={{ color: tema.red }}>Código ya existe</p>
                 )}
               </div>
             </div>
@@ -694,26 +865,26 @@ function JaulaModal({ bloque, jaulas, camadas, animales, onCerrar, editarJaula, 
             {/* Datos heredados */}
             <div className="rounded-xl px-3 py-3 space-y-1.5"
               style={{ background: 'rgba(30,51,82,0.25)', border: '1px solid rgba(30,51,82,0.5)' }}>
-              <div className="text-xs font-semibold uppercase tracking-widest mb-1.5" style={{ color: '#4a5f7a' }}>Datos heredados</div>
+              <div className="text-xs font-semibold uppercase tracking-widest mb-1.5" style={{ color: tema.textMuted }}>Datos heredados</div>
               <div className="flex items-center justify-between text-xs">
-                <span style={{ color: '#4a5f7a' }}>Nacimiento</span>
-                <span className="font-mono" style={{ color: '#8a9bb0' }}>{formatFecha(bloque.camada?.fecha_nacimiento) ?? '—'}</span>
+                <span style={{ color: tema.textMuted }}>Nacimiento</span>
+                <span className="font-mono" style={{ color: tema.textSecondary }}>{formatFecha(bloque.camada?.fecha_nacimiento) ?? '—'}</span>
               </div>
               {bloque.madre && (
                 <div className="flex items-center justify-between text-xs">
-                  <span style={{ color: '#4a5f7a' }}>Madre</span>
-                  <span className="font-mono" style={{ color: '#ce93d8' }}>{bloque.madre.codigo}</span>
+                  <span style={{ color: tema.textMuted }}>Madre</span>
+                  <span className="font-mono" style={{ color: tema.purple }}>{bloque.madre.codigo}</span>
                 </div>
               )}
               {bloque.padre && (
                 <div className="flex items-center justify-between text-xs">
-                  <span style={{ color: '#4a5f7a' }}>Padre</span>
-                  <span className="font-mono" style={{ color: '#40c4ff' }}>{bloque.padre.codigo}</span>
+                  <span style={{ color: tema.textMuted }}>Padre</span>
+                  <span className="font-mono" style={{ color: tema.blue }}>{bloque.padre.codigo}</span>
                 </div>
               )}
               <div className="flex items-center justify-between text-xs">
-                <span style={{ color: '#4a5f7a' }}>Origen</span>
-                <span className="font-mono" style={{ color: '#8a9bb0' }}>Camada ...{bloque.camada?.id?.slice(-6)}</span>
+                <span style={{ color: tema.textMuted }}>Origen</span>
+                <span className="font-mono" style={{ color: tema.textSecondary }}>Camada ...{bloque.camada?.id?.slice(-6)}</span>
               </div>
             </div>
 
@@ -744,7 +915,7 @@ function JaulaModal({ bloque, jaulas, camadas, animales, onCerrar, editarJaula, 
         {/* Virtual → registrar como jaula real */}
         {esVirtual && (
           <button onClick={convertirAJaula} className="w-full py-2 rounded-xl text-sm font-bold"
-            style={{ background: 'rgba(255,179,0,0.1)', border: '1px solid rgba(255,179,0,0.3)', color: '#ffb300', cursor: 'pointer' }}>
+            style={{ background: 'rgba(255,179,0,0.1)', border: '1px solid rgba(255,179,0,0.3)', color: tema.amber, cursor: 'pointer' }}>
             Asignar a jaula registrada
           </button>
         )}
@@ -777,9 +948,9 @@ function calidadMacho(machoId, camadas) {
 }
 
 function nivelCalidad(score) {
-  if (score >= 8) return { label: 'Alta',  color: '#00e676', bg: 'rgba(0,230,118,0.12)',  borde: 'rgba(0,230,118,0.3)' }
-  if (score >= 6) return { label: 'Media', color: '#ffb300', bg: 'rgba(255,179,0,0.12)',  borde: 'rgba(255,179,0,0.3)' }
-  return            { label: 'Baja',  color: '#ff6b80', bg: 'rgba(255,61,87,0.12)',   borde: 'rgba(255,61,87,0.3)' }
+  if (score >= 8) return { label: 'Alta',  color: tema.accent, bg: 'rgba(0,230,118,0.12)',  borde: 'rgba(0,230,118,0.3)' }
+  if (score >= 6) return { label: 'Media', color: tema.amber, bg: 'rgba(255,179,0,0.12)',  borde: 'rgba(255,179,0,0.3)' }
+  return            { label: 'Baja',  color: tema.red, bg: 'rgba(255,61,87,0.12)',   borde: 'rgba(255,61,87,0.3)' }
 }
 
 function CalidadBadge({ sexo, codigo, calidad, animal }) {
@@ -789,12 +960,12 @@ function CalidadBadge({ sexo, codigo, calidad, animal }) {
   return (
     <div className="space-y-1">
     <div className="flex items-center justify-between text-sm">
-      <span className="text-xs uppercase tracking-widest font-semibold flex items-center gap-1" style={{ color: '#4a5f7a' }}>
+      <span className="text-xs uppercase tracking-widest font-semibold flex items-center gap-1" style={{ color: tema.textMuted }}>
         Calidad {sexo === 'macho' ? '♂' : '♀'} {codigo}
         {alertaColor && <span title={animal.notas} style={{ color: alertaColor, cursor: 'help' }}>⚠</span>}
       </span>
       {sinDatos ? (
-        <span className="text-xs font-mono px-2 py-0.5 rounded-lg" style={{ color: '#4a5f7a', background: 'rgba(30,51,82,0.4)' }}>
+        <span className="text-xs font-mono px-2 py-0.5 rounded-lg" style={{ color: tema.textMuted, background: 'rgba(30,51,82,0.4)' }}>
           Sin datos
         </span>
       ) : (
@@ -805,7 +976,7 @@ function CalidadBadge({ sexo, codigo, calidad, animal }) {
           >
             {nivel.label}
           </span>
-          <span className="text-xs font-mono" style={{ color: '#4a5f7a' }}>
+          <span className="text-xs font-mono" style={{ color: tema.textMuted }}>
             {calidad.score}/10 · {calidad.camadas}c
           </span>
         </div>
@@ -824,13 +995,117 @@ function CalidadBadge({ sexo, codigo, calidad, animal }) {
 function Row({ label, valor, color = '#8a9bb0' }) {
   return (
     <div className="flex items-center justify-between text-sm">
-      <span className="text-xs uppercase tracking-widest font-semibold" style={{ color: '#4a5f7a' }}>{label}</span>
+      <span className="text-xs uppercase tracking-widest font-semibold" style={{ color: tema.textMuted }}>{label}</span>
       <span className="font-mono font-semibold" style={{ color }}>{valor}</span>
     </div>
   )
 }
 
-function ModalSacrificio({ bloques, onConfirmar, onCerrar }) {
+// ── Modal de planificación de apareamiento ────────────────────────────────────
+
+function ModalPlanificarApareamiento({ bloquesMacho, bloquesHembra, onGuardar, onCerrar }) {
+  const [fechaPlanificada, setFechaPlanificada] = useState('')
+  const [observaciones,    setObservaciones]    = useState('')
+  const [guardando,        setGuardando]        = useState(false)
+
+  const iStyle = {
+    background: tema.bgCard, border: '1px solid rgba(30,51,82,0.8)',
+    color: '#e2e8f0', borderRadius: '0.5rem', padding: '0.4rem 0.6rem',
+    fontSize: '0.8125rem', fontFamily: 'monospace', width: '100%', outline: 'none',
+  }
+
+  function getNombre(b) {
+    if (b.tipo === 'reproductor') return b.animal.codigo
+    return `${b.madre?.codigo ?? '?'} × ${b.padre?.codigo ?? '?'}`
+  }
+
+  function confirmar() {
+    if (!fechaPlanificada || guardando) return
+    setGuardando(true)
+    onGuardar(fechaPlanificada, observaciones.trim() || null)
+  }
+
+  return (
+    <Modal titulo="Planificar apareamiento" onCerrar={onCerrar} ancho="max-w-sm">
+      <div className="space-y-4">
+
+        {/* Info header */}
+        <div className="flex items-start gap-3 px-4 py-3 rounded-xl"
+          style={{ background: 'rgba(64,196,255,0.06)', border: '1px solid rgba(64,196,255,0.2)' }}>
+          <span className="text-xl shrink-0">🔗</span>
+          <div>
+            <div className="font-bold text-sm" style={{ color: tema.blue }}>Reservar cruce futuro</div>
+            <div className="text-xs mt-0.5" style={{ color: tema.textMuted }}>
+              No crea el apareamiento todavía. Genera un recordatorio para la fecha elegida.
+            </div>
+          </div>
+        </div>
+
+        {/* Fuente machos */}
+        <div className="rounded-xl p-3 space-y-1"
+          style={{ background: 'rgba(64,196,255,0.05)', border: '1px solid rgba(64,196,255,0.2)' }}>
+          <div className="text-xs uppercase tracking-widest font-semibold" style={{ color: tema.blue }}>♂ Fuente de machos</div>
+          <div className="font-mono font-bold text-sm text-white">{getNombre(bloquesMacho)}</div>
+          <div className="text-xs" style={{ color: tema.textMuted }}>
+            {bloquesMacho.total} {bloquesMacho.total === 1 ? 'animal' : 'animales'}
+            {bloquesMacho.edad != null ? ` · ${formatEdad(bloquesMacho.edad)}` : ''}
+          </div>
+        </div>
+
+        {/* Fuente hembras */}
+        <div className="rounded-xl p-3 space-y-1"
+          style={{ background: 'rgba(206,147,216,0.05)', border: '1px solid rgba(206,147,216,0.2)' }}>
+          <div className="text-xs uppercase tracking-widest font-semibold" style={{ color: tema.purple }}>♀ Fuente de hembras</div>
+          <div className="font-mono font-bold text-sm text-white">{getNombre(bloquesHembra)}</div>
+          <div className="text-xs" style={{ color: tema.textMuted }}>
+            {bloquesHembra.total} {bloquesHembra.total === 1 ? 'animal' : 'animales'}
+            {bloquesHembra.edad != null ? ` · ${formatEdad(bloquesHembra.edad)}` : ''}
+          </div>
+        </div>
+
+        {/* Fecha */}
+        <div>
+          <label className="text-xs uppercase tracking-widest font-semibold mb-1 block" style={{ color: tema.textMuted }}>
+            Fecha planificada <span className="normal-case font-normal opacity-60">(requerida)</span>
+          </label>
+          <input type="date" value={fechaPlanificada}
+            onChange={(e) => setFechaPlanificada(e.target.value)} style={iStyle} />
+        </div>
+
+        {/* Observaciones */}
+        <div>
+          <label className="text-xs uppercase tracking-widest font-semibold mb-1 block" style={{ color: tema.textMuted }}>
+            Observaciones <span className="normal-case font-normal opacity-60">(opcional)</span>
+          </label>
+          <input type="text" placeholder="Protocolo, objetivo, investigador..."
+            value={observaciones} onChange={(e) => setObservaciones(e.target.value)}
+            style={{ ...iStyle, fontFamily: 'sans-serif' }} />
+        </div>
+
+        {/* Botones */}
+        <div className="flex gap-3">
+          <button onClick={onCerrar} disabled={guardando}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold"
+            style={{ background: 'rgba(138,155,176,0.08)', border: '1px solid rgba(138,155,176,0.2)', color: tema.textSecondary }}>
+            Cancelar
+          </button>
+          <button onClick={confirmar} disabled={!fechaPlanificada || guardando}
+            className="flex-1 py-2.5 rounded-xl text-sm font-bold"
+            style={{
+              background: (!fechaPlanificada || guardando) ? 'rgba(30,51,82,0.3)' : 'rgba(64,196,255,0.12)',
+              border: `1.5px solid ${(!fechaPlanificada || guardando) ? 'rgba(30,51,82,0.5)' : 'rgba(64,196,255,0.4)'}`,
+              color: (!fechaPlanificada || guardando) ? '#4a5f7a' : '#40c4ff',
+              cursor: (!fechaPlanificada || guardando) ? 'not-allowed' : 'pointer',
+            }}>
+            {guardando ? 'Guardando...' : '🔗 Planificar'}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+function ModalSacrificio({ bloques, onConfirmar, onCerrar, animalesReservados = new Map(), jaulasReservadas = new Map(), reservadosHibridos = new Map() }) {
   const [fecha, setFecha]       = useState(hoy())
   const [notas, setNotas]       = useState('')
   const [guardando, setGuardando] = useState(false)
@@ -841,6 +1116,23 @@ function ModalSacrificio({ bloques, onConfirmar, onCerrar }) {
 
   const tieneRepros = bloques.some(b => b.tipo === 'reproductor')
   const tieneStock  = bloques.some(b => b.tipo === 'stock')
+
+  // Reproductores reservados para apareamiento que se están intentando sacrificar
+  const reprosReservados = bloques.filter(
+    (b) => b.tipo === 'reproductor' && b.animal && animalesReservados.has(b.animal.id)
+  )
+
+  // Jaulas de stock con destino reproductivo que se están intentando sacrificar
+  const stockReservados = bloques.filter(
+    (b) => b.tipo === 'stock' && jaulasReservadas.has(b.id)
+  )
+
+  // Animales o jaulas reservados para cruce F1 en Híbridos
+  const f1Reservados = bloques.filter((b) => {
+    if (b.tipo === 'reproductor' && b.animal) return reservadosHibridos.has(`r-${b.animal.id}`)
+    if (b.tipo === 'stock') return reservadosHibridos.has(b.id)
+    return false
+  })
   const total       = bloques.reduce((s, b) => s + (parseInt(cantidades[b.id]) || 0), 0)
   const cantOk      = bloques.every((b) => {
     const v = parseInt(cantidades[b.id]) || 0
@@ -848,7 +1140,7 @@ function ModalSacrificio({ bloques, onConfirmar, onCerrar }) {
   })
 
   const iStyle = {
-    background: 'rgba(5,8,16,0.6)', border: '1px solid rgba(30,51,82,0.8)',
+    background: tema.bgCard, border: '1px solid rgba(30,51,82,0.8)',
     color: '#e2e8f0', borderRadius: '0.5rem', padding: '0.4rem 0.6rem',
     fontSize: '0.8125rem', width: '100%', outline: 'none',
   }
@@ -870,19 +1162,104 @@ function ModalSacrificio({ bloques, onConfirmar, onCerrar }) {
     <Modal titulo="Confirmar sacrificio" onCerrar={onCerrar} ancho="max-w-md">
       <div className="space-y-4">
 
+        {/* Advertencia: reproductores reservados para apareamiento */}
+        {reprosReservados.length > 0 && (
+          <div className="flex items-start gap-3 px-4 py-3 rounded-xl"
+            style={{ background: 'rgba(251,146,60,0.10)', border: '1px solid rgba(251,146,60,0.35)' }}>
+            <span className="text-xl shrink-0">🗓</span>
+            <div>
+              <div className="font-bold text-sm" style={{ color: '#fb923c' }}>
+                {reprosReservados.length === 1 ? 'Animal reservado para apareamiento' : 'Animales reservados para apareamiento'}
+              </div>
+              <div className="text-xs mt-1 space-y-0.5" style={{ color: tema.textPrimary }}>
+                {reprosReservados.map((b) => {
+                  const r = animalesReservados.get(b.animal.id)
+                  const [, m, d] = r.fecha.split('-')
+                  return (
+                    <div key={b.id} className="font-mono">
+                      {b.animal.codigo} — apareamiento planificado el <span style={{ color: '#fb923c' }}>{d}/{m}</span>
+                    </div>
+                  )
+                })}
+              </div>
+              <div className="text-xs mt-1.5" style={{ color: tema.textMuted }}>
+                Podés continuar, pero se perderá el plan de apareamiento.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Advertencia: jaulas con destino reproductivo planificado */}
+        {stockReservados.length > 0 && (
+          <div className="flex items-start gap-3 px-4 py-3 rounded-xl"
+            style={{ background: 'rgba(251,146,60,0.10)', border: '1px solid rgba(251,146,60,0.35)' }}>
+            <span className="text-xl shrink-0">🟡</span>
+            <div>
+              <div className="font-bold text-sm" style={{ color: '#fb923c' }}>
+                {stockReservados.length === 1 ? 'Jaula con destino reproductivo' : 'Jaulas con destino reproductivo'}
+              </div>
+              <div className="text-xs mt-1 space-y-0.5" style={{ color: tema.textPrimary }}>
+                {stockReservados.map((b) => {
+                  const r = jaulasReservadas.get(b.id)
+                  const [, m, d] = r.fecha.split('-')
+                  return (
+                    <div key={b.id} className="font-mono">
+                      {b.madre?.codigo ?? '?'} × {b.padre?.codigo ?? '?'} — apareamiento planificado el <span style={{ color: '#fb923c' }}>{d}/{m}</span>
+                    </div>
+                  )
+                })}
+              </div>
+              <div className="text-xs mt-1.5" style={{ color: tema.textMuted }}>
+                Podés continuar, pero se perderá el plan de apareamiento.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Advertencia: reservados para cruce F1 en Híbridos */}
+        {f1Reservados.length > 0 && (
+          <div className="flex items-start gap-3 px-4 py-3 rounded-xl"
+            style={{ background: 'rgba(167,139,250,0.10)', border: '1px solid rgba(167,139,250,0.35)' }}>
+            <span className="text-xl shrink-0">🧬</span>
+            <div>
+              <div className="font-bold text-sm" style={{ color: '#a78bfa' }}>
+                {f1Reservados.length === 1 ? 'Animal / jaula reservada para F1' : 'Animales / jaulas reservadas para F1'}
+              </div>
+              <div className="text-xs mt-1 space-y-0.5" style={{ color: tema.textPrimary }}>
+                {f1Reservados.map((b) => {
+                  const id  = b.tipo === 'reproductor' ? `r-${b.animal.id}` : b.id
+                  const r   = reservadosHibridos.get(id)
+                  const [, m, d] = r.fecha.split('-')
+                  const label = b.tipo === 'reproductor'
+                    ? b.animal.codigo
+                    : `${b.madre?.codigo ?? '?'} × ${b.padre?.codigo ?? '?'}`
+                  return (
+                    <div key={b.id} className="font-mono">
+                      {label} — cruce F1 planificado el <span style={{ color: '#a78bfa' }}>{d}/{m}</span>
+                    </div>
+                  )
+                })}
+              </div>
+              <div className="text-xs mt-1.5" style={{ color: tema.textMuted }}>
+                Podés continuar, pero se perderá el plan de cruce F1.
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Advertencia */}
         <div className="flex items-start gap-3 px-4 py-3 rounded-xl"
           style={{ background: 'rgba(255,61,87,0.08)', border: '1px solid rgba(255,61,87,0.25)' }}>
           <span className="text-xl shrink-0">⚠️</span>
           <div>
-            <div className="font-bold text-sm" style={{ color: '#ff6b80' }}>Esta acción no se puede deshacer</div>
-            <div className="text-xs mt-0.5" style={{ color: '#4a5f7a' }}>{mensajeAccion}</div>
+            <div className="font-bold text-sm" style={{ color: tema.red }}>Esta acción no se puede deshacer</div>
+            <div className="text-xs mt-0.5" style={{ color: tema.textMuted }}>{mensajeAccion}</div>
           </div>
         </div>
 
         {/* Lista de seleccionados con cantidad editable */}
         <div>
-          <div className="text-xs uppercase tracking-widest font-semibold mb-2" style={{ color: '#4a5f7a' }}>
+          <div className="text-xs uppercase tracking-widest font-semibold mb-2" style={{ color: tema.textMuted }}>
             Seleccionados para sacrificio ({bloques.length})
           </div>
           <div className="space-y-2 max-h-64 overflow-y-auto">
@@ -894,7 +1271,7 @@ function ModalSacrificio({ bloques, onConfirmar, onCerrar }) {
               const error   = !esRepro && (cant < 1 || cant > b.total)
               return (
                 <div key={b.id} className="px-3 py-2 rounded-xl"
-                  style={{ background: 'rgba(5,8,16,0.5)', border: `1px solid ${error ? 'rgba(255,61,87,0.5)' : cfg.borde}` }}>
+                  style={{ background: tema.bgCard, border: `1px solid ${error ? 'rgba(255,61,87,0.5)' : cfg.borde}` }}>
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 flex-1 min-w-0">
                       <span>{cfg.icono}</span>
@@ -904,14 +1281,14 @@ function ModalSacrificio({ bloques, onConfirmar, onCerrar }) {
                             ? `${b.animal.sexo === 'macho' ? '♂' : '♀'} ${b.animal.codigo}`
                             : `${b.madre?.codigo ?? '?'} × ${b.padre?.codigo ?? '?'}`}
                         </div>
-                        <div className="text-xs" style={{ color: '#4a5f7a' }}>
+                        <div className="text-xs" style={{ color: tema.textMuted }}>
                           {cfg.label}{b.edad != null ? ` · ${b.edad}d` : ''}
-                          {!esRepro && <span style={{ color: '#4a5f7a' }}> · total: {b.total}</span>}
+                          {!esRepro && <span style={{ color: tema.textMuted }}> · total: {b.total}</span>}
                         </div>
                       </div>
                     </div>
                     {esRepro ? (
-                      <div className="font-mono font-bold text-lg" style={{ color: '#ff6b80' }}>1</div>
+                      <div className="font-mono font-bold text-lg" style={{ color: tema.red }}>1</div>
                     ) : (
                       <div className="flex flex-col items-end gap-0.5">
                         <input
@@ -924,7 +1301,7 @@ function ModalSacrificio({ bloques, onConfirmar, onCerrar }) {
                           <span className="text-xs" style={{ color: '#ffd740' }}>parcial — quedan {b.total - cant}</span>
                         )}
                         {error && (
-                          <span className="text-xs" style={{ color: '#ff6b80' }}>1 – {b.total}</span>
+                          <span className="text-xs" style={{ color: tema.red }}>1 – {b.total}</span>
                         )}
                       </div>
                     )}
@@ -934,20 +1311,20 @@ function ModalSacrificio({ bloques, onConfirmar, onCerrar }) {
             })}
           </div>
           <div className="flex justify-between items-center mt-3 px-1">
-            <span className="text-xs uppercase tracking-widest font-semibold" style={{ color: '#4a5f7a' }}>Total a sacrificar</span>
-            <span className="font-mono font-bold text-xl" style={{ color: '#ff6b80' }}>{total} animales</span>
+            <span className="text-xs uppercase tracking-widest font-semibold" style={{ color: tema.textMuted }}>Total a sacrificar</span>
+            <span className="font-mono font-bold text-xl" style={{ color: tema.red }}>{total} animales</span>
           </div>
         </div>
 
         {/* Fecha */}
         <div>
-          <label className="text-xs uppercase tracking-widest font-semibold mb-1 block" style={{ color: '#4a5f7a' }}>Fecha del sacrificio</label>
+          <label className="text-xs uppercase tracking-widest font-semibold mb-1 block" style={{ color: tema.textMuted }}>Fecha del sacrificio</label>
           <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} style={iStyle} />
         </div>
 
         {/* Notas */}
         <div>
-          <label className="text-xs uppercase tracking-widest font-semibold mb-1 block" style={{ color: '#4a5f7a' }}>
+          <label className="text-xs uppercase tracking-widest font-semibold mb-1 block" style={{ color: tema.textMuted }}>
             Notas <span className="normal-case font-normal opacity-60">(opcional)</span>
           </label>
           <input type="text" placeholder="Motivo, protocolo, observaciones..."
@@ -959,7 +1336,7 @@ function ModalSacrificio({ bloques, onConfirmar, onCerrar }) {
         <div className="flex gap-3">
           <button onClick={onCerrar} disabled={guardando}
             className="flex-1 py-2.5 rounded-xl text-sm font-semibold"
-            style={{ background: 'rgba(138,155,176,0.08)', border: '1px solid rgba(138,155,176,0.2)', color: '#8a9bb0' }}>
+            style={{ background: 'rgba(138,155,176,0.08)', border: '1px solid rgba(138,155,176,0.2)', color: tema.textSecondary }}>
             Cancelar
           </button>
           <button onClick={confirmar} disabled={guardando || !cantOk}
@@ -978,13 +1355,30 @@ function ModalSacrificio({ bloques, onConfirmar, onCerrar }) {
   )
 }
 
-function ModalEntrega({ bloques, onConfirmar, onCerrar }) {
+function ModalEntrega({ bloques, onConfirmar, onCerrar, animalesReservados = new Map(), jaulasReservadas = new Map(), reservadosHibridos = new Map() }) {
   const [fecha,        setFecha]        = useState(hoy())
   const [observaciones, setObservaciones] = useState('')
   const [guardando,    setGuardando]    = useState(false)
   const [cantidades,   setCantidades]   = useState(() =>
     Object.fromEntries(bloques.map((b) => [b.id, b.total]))
   )
+
+  // Reproductores reservados para apareamiento que se están intentando entregar
+  const reprosReservados = bloques.filter(
+    (b) => b.tipo === 'reproductor' && b.animal && animalesReservados.has(b.animal.id)
+  )
+
+  // Jaulas de stock con destino reproductivo que se están intentando entregar
+  const stockReservados = bloques.filter(
+    (b) => b.tipo === 'stock' && jaulasReservadas.has(b.id)
+  )
+
+  // Animales o jaulas reservados para cruce F1 en Híbridos
+  const f1Reservados = bloques.filter((b) => {
+    if (b.tipo === 'reproductor' && b.animal) return reservadosHibridos.has(`r-${b.animal.id}`)
+    if (b.tipo === 'stock') return reservadosHibridos.has(b.id)
+    return false
+  })
 
   const total  = bloques.reduce((s, b) => s + (parseInt(cantidades[b.id]) || 0), 0)
   const cantOk = bloques.every((b) => {
@@ -993,7 +1387,7 @@ function ModalEntrega({ bloques, onConfirmar, onCerrar }) {
   })
 
   const iStyle = {
-    background: 'rgba(5,8,16,0.6)', border: '1px solid rgba(30,51,82,0.8)',
+    background: tema.bgCard, border: '1px solid rgba(30,51,82,0.8)',
     color: '#e2e8f0', borderRadius: '0.5rem', padding: '0.4rem 0.6rem',
     fontSize: '0.8125rem', width: '100%', outline: 'none',
   }
@@ -1009,13 +1403,98 @@ function ModalEntrega({ bloques, onConfirmar, onCerrar }) {
     <Modal titulo="Registrar entrega" onCerrar={onCerrar} ancho="max-w-md">
       <div className="space-y-4">
 
+        {/* Advertencia: animales reservados */}
+        {reprosReservados.length > 0 && (
+          <div className="flex items-start gap-3 px-4 py-3 rounded-xl"
+            style={{ background: 'rgba(251,146,60,0.10)', border: '1px solid rgba(251,146,60,0.35)' }}>
+            <span className="text-xl shrink-0">🗓</span>
+            <div>
+              <div className="font-bold text-sm" style={{ color: '#fb923c' }}>
+                {reprosReservados.length === 1 ? 'Animal reservado para apareamiento' : 'Animales reservados para apareamiento'}
+              </div>
+              <div className="text-xs mt-1 space-y-0.5" style={{ color: tema.textPrimary }}>
+                {reprosReservados.map((b) => {
+                  const r = animalesReservados.get(b.animal.id)
+                  const [, m, d] = r.fecha.split('-')
+                  return (
+                    <div key={b.id} className="font-mono">
+                      {b.animal.codigo} — apareamiento planificado el <span style={{ color: '#fb923c' }}>{d}/{m}</span>
+                    </div>
+                  )
+                })}
+              </div>
+              <div className="text-xs mt-1.5" style={{ color: tema.textMuted }}>
+                Podés continuar, pero se perderá el plan de apareamiento.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Advertencia: jaulas con destino reproductivo planificado */}
+        {stockReservados.length > 0 && (
+          <div className="flex items-start gap-3 px-4 py-3 rounded-xl"
+            style={{ background: 'rgba(251,146,60,0.10)', border: '1px solid rgba(251,146,60,0.35)' }}>
+            <span className="text-xl shrink-0">🟡</span>
+            <div>
+              <div className="font-bold text-sm" style={{ color: '#fb923c' }}>
+                {stockReservados.length === 1 ? 'Jaula con destino reproductivo' : 'Jaulas con destino reproductivo'}
+              </div>
+              <div className="text-xs mt-1 space-y-0.5" style={{ color: tema.textPrimary }}>
+                {stockReservados.map((b) => {
+                  const r = jaulasReservadas.get(b.id)
+                  const [, m, d] = r.fecha.split('-')
+                  return (
+                    <div key={b.id} className="font-mono">
+                      {b.madre?.codigo ?? '?'} × {b.padre?.codigo ?? '?'} — apareamiento planificado el <span style={{ color: '#fb923c' }}>{d}/{m}</span>
+                    </div>
+                  )
+                })}
+              </div>
+              <div className="text-xs mt-1.5" style={{ color: tema.textMuted }}>
+                Podés continuar, pero se perderá el plan de apareamiento.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Advertencia: reservados para cruce F1 en Híbridos */}
+        {f1Reservados.length > 0 && (
+          <div className="flex items-start gap-3 px-4 py-3 rounded-xl"
+            style={{ background: 'rgba(167,139,250,0.10)', border: '1px solid rgba(167,139,250,0.35)' }}>
+            <span className="text-xl shrink-0">🧬</span>
+            <div>
+              <div className="font-bold text-sm" style={{ color: '#a78bfa' }}>
+                {f1Reservados.length === 1 ? 'Animal / jaula reservada para F1' : 'Animales / jaulas reservadas para F1'}
+              </div>
+              <div className="text-xs mt-1 space-y-0.5" style={{ color: tema.textPrimary }}>
+                {f1Reservados.map((b) => {
+                  const id  = b.tipo === 'reproductor' ? `r-${b.animal.id}` : b.id
+                  const r   = reservadosHibridos.get(id)
+                  const [, m, d] = r.fecha.split('-')
+                  const label = b.tipo === 'reproductor'
+                    ? b.animal.codigo
+                    : `${b.madre?.codigo ?? '?'} × ${b.padre?.codigo ?? '?'}`
+                  return (
+                    <div key={b.id} className="font-mono">
+                      {label} — cruce F1 planificado el <span style={{ color: '#a78bfa' }}>{d}/{m}</span>
+                    </div>
+                  )
+                })}
+              </div>
+              <div className="text-xs mt-1.5" style={{ color: tema.textMuted }}>
+                Podés continuar, pero se perderá el plan de cruce F1.
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Info */}
         <div className="flex items-start gap-3 px-4 py-3 rounded-xl"
           style={{ background: 'rgba(255,179,0,0.08)', border: '1px solid rgba(255,179,0,0.25)' }}>
           <span className="text-xl shrink-0">📦</span>
           <div>
-            <div className="font-bold text-sm" style={{ color: '#ffb300' }}>Entrega de animales</div>
-            <div className="text-xs mt-0.5" style={{ color: '#4a5f7a' }}>
+            <div className="font-bold text-sm" style={{ color: tema.amber }}>Entrega de animales</div>
+            <div className="text-xs mt-0.5" style={{ color: tema.textMuted }}>
               Los animales se remueven del stock activo. Los reproductores pasan a estado "Retirado".
             </div>
           </div>
@@ -1023,7 +1502,7 @@ function ModalEntrega({ bloques, onConfirmar, onCerrar }) {
 
         {/* Lista con cantidades */}
         <div>
-          <div className="text-xs uppercase tracking-widest font-semibold mb-2" style={{ color: '#4a5f7a' }}>
+          <div className="text-xs uppercase tracking-widest font-semibold mb-2" style={{ color: tema.textMuted }}>
             Seleccionados ({bloques.length})
           </div>
           <div className="space-y-2 max-h-56 overflow-y-auto">
@@ -1035,7 +1514,7 @@ function ModalEntrega({ bloques, onConfirmar, onCerrar }) {
               const error  = !esRepro && (cant < 1 || cant > b.total)
               return (
                 <div key={b.id} className="px-3 py-2 rounded-xl"
-                  style={{ background: 'rgba(5,8,16,0.5)', border: `1px solid ${error ? 'rgba(255,61,87,0.5)' : cfg.borde}` }}>
+                  style={{ background: tema.bgCard, border: `1px solid ${error ? 'rgba(255,61,87,0.5)' : cfg.borde}` }}>
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 flex-1 min-w-0">
                       <span>{cfg.icono}</span>
@@ -1045,14 +1524,14 @@ function ModalEntrega({ bloques, onConfirmar, onCerrar }) {
                             ? `${b.animal.sexo === 'macho' ? '♂' : '♀'} ${b.animal.codigo}`
                             : `${b.madre?.codigo ?? '?'} × ${b.padre?.codigo ?? '?'}`}
                         </div>
-                        <div className="text-xs" style={{ color: '#4a5f7a' }}>
+                        <div className="text-xs" style={{ color: tema.textMuted }}>
                           {cfg.label}{b.edad != null ? ` · ${b.edad}d` : ''}
                           {!esRepro && <span> · total: {b.total}</span>}
                         </div>
                       </div>
                     </div>
                     {esRepro ? (
-                      <div className="font-mono font-bold text-lg" style={{ color: '#ffb300' }}>1</div>
+                      <div className="font-mono font-bold text-lg" style={{ color: tema.amber }}>1</div>
                     ) : (
                       <div className="flex flex-col items-end gap-0.5">
                         <input
@@ -1062,7 +1541,7 @@ function ModalEntrega({ bloques, onConfirmar, onCerrar }) {
                           style={{ ...iStyle, width: '5rem', textAlign: 'center', color: error ? '#ff6b80' : '#e2e8f0' }}
                         />
                         {parcial && <span className="text-xs" style={{ color: '#ffd740' }}>parcial — quedan {b.total - cant}</span>}
-                        {error   && <span className="text-xs" style={{ color: '#ff6b80' }}>1 – {b.total}</span>}
+                        {error   && <span className="text-xs" style={{ color: tema.red }}>1 – {b.total}</span>}
                       </div>
                     )}
                   </div>
@@ -1071,20 +1550,20 @@ function ModalEntrega({ bloques, onConfirmar, onCerrar }) {
             })}
           </div>
           <div className="flex justify-between items-center mt-3 px-1">
-            <span className="text-xs uppercase tracking-widest font-semibold" style={{ color: '#4a5f7a' }}>Total a entregar</span>
-            <span className="font-mono font-bold text-xl" style={{ color: '#ffb300' }}>{total} animales</span>
+            <span className="text-xs uppercase tracking-widest font-semibold" style={{ color: tema.textMuted }}>Total a entregar</span>
+            <span className="font-mono font-bold text-xl" style={{ color: tema.amber }}>{total} animales</span>
           </div>
         </div>
 
         {/* Fecha */}
         <div>
-          <label className="text-xs uppercase tracking-widest font-semibold mb-1 block" style={{ color: '#4a5f7a' }}>Fecha de entrega</label>
+          <label className="text-xs uppercase tracking-widest font-semibold mb-1 block" style={{ color: tema.textMuted }}>Fecha de entrega</label>
           <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} style={iStyle} />
         </div>
 
         {/* Observaciones */}
         <div>
-          <label className="text-xs uppercase tracking-widest font-semibold mb-1 block" style={{ color: '#4a5f7a' }}>
+          <label className="text-xs uppercase tracking-widest font-semibold mb-1 block" style={{ color: tema.textMuted }}>
             Observaciones <span className="normal-case font-normal opacity-60">(opcional)</span>
           </label>
           <input type="text" placeholder="Investigador, protocolo, destino..."
@@ -1096,7 +1575,7 @@ function ModalEntrega({ bloques, onConfirmar, onCerrar }) {
         <div className="flex gap-3">
           <button onClick={onCerrar} disabled={guardando}
             className="flex-1 py-2.5 rounded-xl text-sm font-semibold"
-            style={{ background: 'rgba(138,155,176,0.08)', border: '1px solid rgba(138,155,176,0.2)', color: '#8a9bb0' }}>
+            style={{ background: 'rgba(138,155,176,0.08)', border: '1px solid rgba(138,155,176,0.2)', color: tema.textSecondary }}>
             Cancelar
           </button>
           <button onClick={confirmar} disabled={guardando || !cantOk}
@@ -1154,7 +1633,7 @@ function ModalPromoverReproductor({ bloques, animales, onConfirmar, onCerrar }) 
   const todosOk = errores.every((e) => !e)
 
   const iStyle = {
-    background: 'rgba(5,8,16,0.6)', border: '1px solid rgba(30,51,82,0.8)',
+    background: tema.bgCard, border: '1px solid rgba(30,51,82,0.8)',
     color: '#e2e8f0', borderRadius: '0.5rem', padding: '0.4rem 0.6rem',
     fontSize: '0.8125rem', fontFamily: 'monospace', width: '100%', outline: 'none',
   }
@@ -1173,10 +1652,10 @@ function ModalPromoverReproductor({ bloques, animales, onConfirmar, onCerrar }) 
         {/* Info */}
         <div className="flex items-start gap-3 px-4 py-3 rounded-xl"
           style={{ background: 'rgba(0,230,118,0.06)', border: '1px solid rgba(0,230,118,0.2)' }}>
-          <UserPlus size={17} style={{ color: '#00e676', flexShrink: 0, marginTop: 1 }} />
+          <UserPlus size={17} style={{ color: tema.accent, flexShrink: 0, marginTop: 1 }} />
           <div>
-            <div className="font-bold text-sm" style={{ color: '#00e676' }}>Convertir en reproductor</div>
-            <div className="text-xs mt-0.5" style={{ color: '#4a5f7a' }}>
+            <div className="font-bold text-sm" style={{ color: tema.accent }}>Convertir en reproductor</div>
+            <div className="text-xs mt-0.5" style={{ color: tema.textMuted }}>
               1 animal por jaula se extrae del stock y pasa a Reproductores con estado Activo.
             </div>
           </div>
@@ -1189,14 +1668,14 @@ function ModalPromoverReproductor({ bloques, animales, onConfirmar, onCerrar }) 
             const err = errores[idx]
             return (
               <div key={b.id} className="rounded-xl p-3 space-y-2"
-                style={{ background: 'rgba(5,8,16,0.5)', border: `1px solid ${err ? 'rgba(255,61,87,0.4)' : cfg.borde}` }}>
+                style={{ background: tema.bgCard, border: `1px solid ${err ? 'rgba(255,61,87,0.4)' : cfg.borde}` }}>
 
                 {/* Header jaula */}
                 <div>
                   <div className="text-xs font-mono font-semibold" style={{ color: cfg.color }}>
                     {b.madre?.codigo ?? '?'} × {b.padre?.codigo ?? '?'}
                   </div>
-                  <div className="text-xs" style={{ color: '#4a5f7a' }}>
+                  <div className="text-xs" style={{ color: tema.textMuted }}>
                     {cfg.label} · {b.total} en jaula
                     {b.camada?.fecha_nacimiento && ` · nac. ${formatFecha(b.camada.fecha_nacimiento)}`}
                   </div>
@@ -1205,14 +1684,14 @@ function ModalPromoverReproductor({ bloques, animales, onConfirmar, onCerrar }) 
                 {/* Sexo + Código */}
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <div className="text-xs font-semibold uppercase tracking-widest mb-1" style={{ color: '#4a5f7a' }}>Sexo</div>
+                    <div className="text-xs font-semibold uppercase tracking-widest mb-1" style={{ color: tema.textMuted }}>Sexo</div>
                     <select value={items[idx].sexo} onChange={(e) => updateItem(idx, 'sexo', e.target.value)} style={iStyle}>
                       <option value="hembra">♀ Hembra</option>
                       <option value="macho">♂ Macho</option>
                     </select>
                   </div>
                   <div>
-                    <div className="text-xs font-semibold uppercase tracking-widest mb-1" style={{ color: '#4a5f7a' }}>Código</div>
+                    <div className="text-xs font-semibold uppercase tracking-widest mb-1" style={{ color: tema.textMuted }}>Código</div>
                     <input
                       type="text"
                       value={items[idx].codigo}
@@ -1220,15 +1699,15 @@ function ModalPromoverReproductor({ bloques, animales, onConfirmar, onCerrar }) 
                       placeholder="Ej: H-A3F2"
                       style={{ ...iStyle, borderColor: err ? 'rgba(255,61,87,0.5)' : undefined }}
                     />
-                    {err && <p className="text-xs mt-0.5" style={{ color: '#ff6b80' }}>{err}</p>}
+                    {err && <p className="text-xs mt-0.5" style={{ color: tema.red }}>{err}</p>}
                   </div>
                 </div>
 
                 {/* Datos heredados compactos */}
                 <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs px-1">
-                  {b.madre && <span style={{ color: '#4a5f7a' }}>Madre <span style={{ color: '#ce93d8' }}>{b.madre.codigo}</span></span>}
-                  {b.padre && <span style={{ color: '#4a5f7a' }}>Padre <span style={{ color: '#40c4ff' }}>{b.padre.codigo}</span></span>}
-                  {b.camada?.fecha_nacimiento && <span style={{ color: '#4a5f7a' }}>Nac. <span style={{ color: '#8a9bb0' }}>{formatFecha(b.camada.fecha_nacimiento)}</span></span>}
+                  {b.madre && <span style={{ color: tema.textMuted }}>Madre <span style={{ color: tema.purple }}>{b.madre.codigo}</span></span>}
+                  {b.padre && <span style={{ color: tema.textMuted }}>Padre <span style={{ color: tema.blue }}>{b.padre.codigo}</span></span>}
+                  {b.camada?.fecha_nacimiento && <span style={{ color: tema.textMuted }}>Nac. <span style={{ color: tema.textSecondary }}>{formatFecha(b.camada.fecha_nacimiento)}</span></span>}
                 </div>
               </div>
             )
@@ -1239,7 +1718,7 @@ function ModalPromoverReproductor({ bloques, animales, onConfirmar, onCerrar }) 
         <div className="flex gap-3">
           <button onClick={onCerrar} disabled={guardando}
             className="flex-1 py-2.5 rounded-xl text-sm font-semibold"
-            style={{ background: 'rgba(138,155,176,0.08)', border: '1px solid rgba(138,155,176,0.2)', color: '#8a9bb0' }}>
+            style={{ background: 'rgba(138,155,176,0.08)', border: '1px solid rgba(138,155,176,0.2)', color: tema.textSecondary }}>
             Cancelar
           </button>
           <button onClick={confirmar} disabled={guardando || !todosOk}
@@ -1262,40 +1741,40 @@ function ModalPromoverReproductor({ bloques, animales, onConfirmar, onCerrar }) 
 
 function CategoriaCard({ icono, titulo, subtitulo, total, grupos, gruposLabel, machos, hembras, color, descripcion }) {
   return (
-    <div className="rounded-2xl overflow-hidden" style={{ background: 'rgba(13,21,40,0.8)', border: '1px solid rgba(30,51,82,0.8)' }}>
+    <div className="rounded-2xl overflow-hidden" style={{ background: tema.bgCard, border: '1px solid rgba(30,51,82,0.8)' }}>
       <div className="px-5 py-4 flex items-center gap-3" style={{ background: `${color}08`, borderBottom: `1px solid ${color}18` }}>
         <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0" style={{ background: `${color}15`, border: `1px solid ${color}30` }}>
           {icono}
         </div>
         <div className="flex-1">
           <div className="font-bold text-sm text-white">{titulo}</div>
-          <div className="text-xs mt-0.5" style={{ color: '#4a5f7a' }}>{subtitulo}</div>
+          <div className="text-xs mt-0.5" style={{ color: tema.textMuted }}>{subtitulo}</div>
         </div>
         <div className="text-right">
           <div className="font-mono font-bold text-3xl" style={{ color }}>{total}</div>
-          <div className="text-xs font-mono" style={{ color: '#4a5f7a' }}>animales</div>
+          <div className="text-xs font-mono" style={{ color: tema.textMuted }}>animales</div>
         </div>
       </div>
       <div className="px-5 py-3 flex flex-wrap gap-4">
         {grupos !== undefined && (
           <div>
-            <div className="text-xs uppercase tracking-widest font-semibold mb-0.5" style={{ color: '#4a5f7a' }}>{gruposLabel ?? 'Grupos'}</div>
+            <div className="text-xs uppercase tracking-widest font-semibold mb-0.5" style={{ color: tema.textMuted }}>{gruposLabel ?? 'Grupos'}</div>
             <div className="font-mono font-bold text-lg text-white">{grupos}</div>
           </div>
         )}
         {machos !== undefined && (
           <div>
-            <div className="text-xs uppercase tracking-widest font-semibold mb-0.5" style={{ color: '#4a5f7a' }}>♂ Machos</div>
-            <div className="font-mono font-bold text-lg" style={{ color: '#40c4ff' }}>{machos}</div>
+            <div className="text-xs uppercase tracking-widest font-semibold mb-0.5" style={{ color: tema.textMuted }}>♂ Machos</div>
+            <div className="font-mono font-bold text-lg" style={{ color: tema.blue }}>{machos}</div>
           </div>
         )}
         {hembras !== undefined && (
           <div>
-            <div className="text-xs uppercase tracking-widest font-semibold mb-0.5" style={{ color: '#4a5f7a' }}>♀ Hembras</div>
-            <div className="font-mono font-bold text-lg" style={{ color: '#ce93d8' }}>{hembras}</div>
+            <div className="text-xs uppercase tracking-widest font-semibold mb-0.5" style={{ color: tema.textMuted }}>♀ Hembras</div>
+            <div className="font-mono font-bold text-lg" style={{ color: tema.purple }}>{hembras}</div>
           </div>
         )}
-        {descripcion && <div className="ml-auto self-center text-xs text-right" style={{ color: '#4a5f7a' }}>{descripcion}</div>}
+        {descripcion && <div className="ml-auto self-center text-xs text-right" style={{ color: tema.textMuted }}>{descripcion}</div>}
       </div>
     </div>
   )
@@ -1304,17 +1783,121 @@ function CategoriaCard({ icono, titulo, subtitulo, total, grupos, gruposLabel, m
 // ── Página principal ──────────────────────────────────────────────────────────
 
 
+function ModalEliminarJaula({ bloque, onConfirmar, onCerrar }) {
+  const [guardando, setGuardando] = useState(false)
+  const cfg = CAT[bloque.categoria]
+
+  async function confirmar() {
+    if (guardando) return
+    setGuardando(true)
+    try { await onConfirmar() }
+    finally { setGuardando(false) }
+  }
+
+  const etiqueta = bloque.madre || bloque.padre
+    ? `${bloque.madre?.codigo ?? '?'} × ${bloque.padre?.codigo ?? '?'}`
+    : 'Sin progenitores registrados'
+
+  return (
+    <Modal titulo="Eliminar jaula" onCerrar={guardando ? null : onCerrar} ancho="max-w-sm">
+      <div className="space-y-4">
+
+        {/* Info de la jaula */}
+        <div className="px-4 py-3 rounded-xl" style={{ background: tema.bgCard, border: `1px solid ${cfg.borde}` }}>
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">{cfg.icono}</span>
+            <div>
+              <div className="font-mono font-semibold text-sm" style={{ color: cfg.color }}>{etiqueta}</div>
+              <div className="text-xs mt-0.5" style={{ color: tema.textSecondary }}>
+                {cfg.label}{bloque.edad != null ? ` · ${bloque.edad}d` : ''} · {bloque.total} animales
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Advertencia */}
+        <div className="flex items-start gap-3 px-4 py-3 rounded-xl"
+          style={{ background: 'rgba(255,61,87,0.08)', border: '1px solid rgba(255,61,87,0.25)' }}>
+          <span className="text-xl shrink-0">⚠️</span>
+          <div>
+            <div className="font-bold text-sm" style={{ color: tema.red }}>Esta acción no se puede deshacer</div>
+            <div className="text-xs mt-0.5" style={{ color: tema.textMuted }}>
+              {bloque.virtual
+                ? 'La jaula dejará de aparecer en stock. La camada queda registrada pero sin asignación de jaula.'
+                : 'La jaula y sus datos de stock serán eliminados permanentemente de la base de datos.'}
+            </div>
+          </div>
+        </div>
+
+        {/* Botones */}
+        <div className="flex gap-3">
+          <button onClick={onCerrar} disabled={guardando}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold"
+            style={{ background: 'rgba(138,155,176,0.08)', border: '1px solid rgba(138,155,176,0.2)', color: tema.textSecondary, cursor: 'pointer' }}>
+            Cancelar
+          </button>
+          <button onClick={confirmar} disabled={guardando}
+            className="flex-1 py-2.5 rounded-xl text-sm font-bold"
+            style={{
+              background: guardando ? 'rgba(30,51,82,0.3)' : 'rgba(255,61,87,0.15)',
+              border: `1.5px solid ${guardando ? 'rgba(30,51,82,0.5)' : 'rgba(255,61,87,0.4)'}`,
+              color: guardando ? '#4a5f7a' : '#ff6b80',
+              cursor: guardando ? 'not-allowed' : 'pointer',
+            }}>
+            {guardando ? 'Eliminando...' : '✕ Eliminar jaula'}
+          </button>
+        </div>
+
+      </div>
+    </Modal>
+  )
+}
+
 export default function Stock() {
-  const { animales, camadas, sacrificios, entregas, jaulas, agregarAnimal, editarAnimal, sacrificarReproductor, editarJaula, agregarJaula, eliminarJaula, registrarSacrificio, registrarEntrega, entregarReproductor, bio } = useBioterio()
+  const { tema, modoBrillo } = useTheme()
+  const CAT = {
+    macho_repro:  { label: 'Macho reproductor',  color: tema.blue, bg: 'rgba(64,196,255,0.1)',   borde: 'rgba(64,196,255,0.3)',   icono: '🐀' },
+    hembra_repro: { label: 'Hembra reproductora', color: tema.purple, bg: 'rgba(206,147,216,0.1)',  borde: 'rgba(206,147,216,0.3)', icono: '🐀' },
+    crias:        { label: 'Crías',               color: tema.accent, bg: 'rgba(0,230,118,0.08)',   borde: 'rgba(0,230,118,0.25)',  icono: '🐣' },
+    jovenes:      { label: 'Jóvenes',             color: tema.amber, bg: 'rgba(255,179,0,0.08)',   borde: 'rgba(255,179,0,0.25)',  icono: '🐭' },
+    adultos:      { label: 'Adultos',             color: tema.red, bg: 'rgba(255,61,87,0.08)',   borde: 'rgba(255,61,87,0.25)', icono: '🐁' },
+  }
+  const { animales, animalesExportados, camadas, sacrificios, entregas, jaulas, bio, bioterioActivo, agregarAnimal, editarAnimal, sacrificarReproductor, editarJaula, agregarJaula, eliminarJaula, editarCamada, registrarSacrificio, registrarEntrega, entregarReproductor } = useBioterio()
+  const esHibridos = bioterioActivo === 'ratones_hibridos'
+  // Sacrificios de ratones se manejan desde el Resumen global de ratones
+  const esSubgrupoRatones = bioterioActivo === 'ratones_balbc' || bioterioActivo === 'ratones_c57' || bioterioActivo === 'ratones_hibridos'
+  // Para encontrar progenitores en Híbridos (están en animalesExportados, no en animales)
+  const todosAnimales = useMemo(() => [...animales, ...animalesExportados], [animales, animalesExportados])
+
+  // Mapa de animales reservados para apareamiento planificado (se recalcula con el bioterio)
+  const animalesReservados = useMemo(
+    () => getAnimalesReservados(bioterioActivo),
+    [bioterioActivo, animales] // eslint-disable-line react-hooks/exhaustive-deps
+  )
+
+  // Mapa de jaulas/bloques de stock con destino reproductivo planificado
+  const jaulasReservadas = useMemo(
+    () => getJaulasReservadas(bioterioActivo),
+    [bioterioActivo, jaulas] // eslint-disable-line react-hooks/exhaustive-deps
+  )
+
+  // Mapa de bloques reservados para cruces F1 en Híbridos (solo visible en BALB/C y C57)
+  const reservadosHibridos = useMemo(() => {
+    if (bioterioActivo !== 'ratones_balbc' && bioterioActivo !== 'ratones_c57') return new Map()
+    return getReservadosParaHibridos(bioterioActivo)
+  }, [bioterioActivo, animales, jaulas]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const [vista, setVista] = useState('jaulas')
   const [subVista, setSubVista] = useState(null)
   const [detalle, setDetalle] = useState(null)
   const [filtroCat, setFiltroCat] = useState('todas')
   const [modoSeleccion, setModoSeleccion] = useState(false)
   const [seleccionadas, setSeleccionadas] = useState(new Set())
-  const [modalSacrificio, setModalSacrificio] = useState(false)
-  const [modalEntrega, setModalEntrega]       = useState(false)
-  const [modalPromover, setModalPromover]     = useState(false)
+  const [modalSacrificio,  setModalSacrificio]  = useState(false)
+  const [modalEntrega,     setModalEntrega]     = useState(false)
+  const [modalPromover,    setModalPromover]    = useState(false)
+  const [modalPlanificar,  setModalPlanificar]  = useState(false)
+  const [jaulaAEliminar,   setJaulaAEliminar]   = useState(null)
 
   // ── Bloques de jaulas (reproductores + stock) ─────────────────────────────
   const bloques = useMemo(() => {
@@ -1338,9 +1921,13 @@ export default function Stock() {
     jaulas.forEach((jaula) => {
       const camada = camadas.find((c) => c.id === jaula.camada_id)
       if (!camada?.fecha_nacimiento || jaula.total <= 0) return
+      // Red de seguridad: si todos los animales fueron sacrificados/entregados,
+      // no mostrar la jaula aunque siga en DB (cubre casos donde eliminarJaula falló)
+      const stockEfectivo = stockCamada(camada, sacrificios, entregas)
+      if (stockEfectivo <= 0) return
       const edad = edadDias(camada.fecha_nacimiento)
-      const madre = animales.find((a) => a.id === camada.id_madre)
-      const padre = animales.find((a) => a.id === camada.id_padre)
+      const madre = todosAnimales.find((a) => a.id === camada.id_madre)
+      const padre = todosAnimales.find((a) => a.id === camada.id_padre)
       result.push({
         tipo: 'stock',
         id: `j-${jaula.id}`,
@@ -1349,23 +1936,24 @@ export default function Stock() {
         madre,
         padre,
         edad,
-        categoria: categoriaStock(edad, bio),
+        categoria: categoriaStock(edad, bio.STOCK_ADULTOS_DIAS),
         total: jaula.total,
         machos: jaula.machos,
         hembras: jaula.hembras,
       })
     })
 
-    // 3. Bloques virtuales — camadas destetadas sin jaulas asignadas (datos históricos)
+    // 3. Bloques virtuales — solo camadas propias del bioterio activo (no F1 de otros)
     camadas.forEach((camada) => {
       if (!camada.fecha_nacimiento || !camada.fecha_destete) return
       if (camada.incluir_en_stock === false) return
+      if (camada.bioterio_id && camada.bioterio_id !== bioterioActivo) return
       if (jaulas.some((j) => j.camada_id === camada.id)) return
       const stock = stockCamada(camada, sacrificios, entregas)
       if (stock <= 0) return
       const edad = edadDias(camada.fecha_nacimiento)
-      const madre = animales.find((a) => a.id === camada.id_madre)
-      const padre = animales.find((a) => a.id === camada.id_padre)
+      const madre = todosAnimales.find((a) => a.id === camada.id_madre)
+      const padre = todosAnimales.find((a) => a.id === camada.id_padre)
       result.push({
         tipo: 'stock',
         id: `v-${camada.id}`,
@@ -1374,7 +1962,7 @@ export default function Stock() {
         madre,
         padre,
         edad,
-        categoria: categoriaStock(edad, bio),
+        categoria: categoriaStock(edad, bio.STOCK_ADULTOS_DIAS),
         total: stock,
         machos: camada.crias_machos,
         hembras: camada.crias_hembras,
@@ -1382,18 +1970,20 @@ export default function Stock() {
     })
 
     return result
-  }, [animales, camadas, jaulas, sacrificios, bio])
+  }, [todosAnimales, camadas, jaulas, sacrificios, entregas, bio, bioterioActivo])
 
   // ── Resumen por categoría ─────────────────────────────────────────────────
   const resumen = useMemo(() => {
     const cats = Object.fromEntries(Object.keys(CAT).map((k) => [k, { animales: 0, jaulas: 0 }]))
     bloques.forEach((b) => {
       cats[b.categoria].animales += b.total
-      cats[b.categoria].jaulas += 1
+      // Hembras en apareamiento no cuentan como jaula ocupada (su jaula está vacía)
+      if (!esFemEnApareamiento(b)) cats[b.categoria].jaulas += 1
     })
     const totalAnimales = Object.values(cats).reduce((s, c) => s + c.animales, 0)
-    const totalJaulas = Object.values(cats).reduce((s, c) => s + c.jaulas, 0)
-    return { ...cats, totalAnimales, totalJaulas }
+    const totalJaulas   = Object.values(cats).reduce((s, c) => s + c.jaulas, 0)
+    const femEnApareamiento = bloques.filter(esFemEnApareamiento).length
+    return { ...cats, totalAnimales, totalJaulas, femEnApareamiento }
   }, [bloques])
 
   // ── Datos para la vista "Resumen" (categorías) ────────────────────────────
@@ -1423,7 +2013,7 @@ export default function Stock() {
       const h = b.hembras ?? 0
       if (edad < 42) {
         crias.total += total; crias.grupos += 1; crias.machos += m; crias.hembras += h
-      } else if (edad < bio.MADUREZ_DIAS) {
+      } else if (edad < bio.STOCK_ADULTOS_DIAS) {
         jovenes.total += total; jovenes.grupos += 1; jovenes.machos += m; jovenes.hembras += h
       } else {
         adultosNR.total += total; adultosNR.grupos += 1; adultosNR.machos += m; adultosNR.hembras += h
@@ -1442,8 +2032,17 @@ export default function Stock() {
     bloques.filter((b) => seleccionadas.has(b.id)).reduce((s, b) => s + b.total, 0),
   [bloques, seleccionadas])
 
+  // Detectar si la selección actual permite planificar un apareamiento
+  const bloquesSelArray = useMemo(() =>
+    bloques.filter((b) => seleccionadas.has(b.id)),
+  [bloques, seleccionadas])
+  const machoSel       = bloquesSelArray.find((b) => sexoBloque(b) === 'macho') ?? null
+  const hembraSel      = bloquesSelArray.find((b) => sexoBloque(b) === 'hembra') ?? null
+  const puedePlanificar = bloquesSelArray.length === 2 && Boolean(machoSel) && Boolean(hembraSel)
+
   function toggleSeleccion(bloque) {
     if (bloque.virtual) return
+    if (esFemEnApareamiento(bloque)) return
     setSeleccionadas((prev) => {
       const next = new Set(prev)
       next.has(bloque.id) ? next.delete(bloque.id) : next.add(bloque.id)
@@ -1454,6 +2053,18 @@ export default function Stock() {
   function salirModoSeleccion() {
     setModoSeleccion(false)
     setSeleccionadas(new Set())
+  }
+
+  // Eliminar jaula individualmente (botón X en cada bloque)
+  // - Jaula real: elimina la fila en Supabase
+  // - Bloque virtual: desactiva incluir_en_stock en la camada → deja de aparecer
+  async function eliminarBloque(bloque) {
+    if (bloque.tipo !== 'stock') return
+    if (!bloque.virtual && bloque.jaula?.id) {
+      await eliminarJaula(bloque.jaula.id)
+    } else if (bloque.virtual && bloque.camada) {
+      await editarCamada({ ...bloque.camada, incluir_en_stock: false })
+    }
   }
 
   async function ejecutarSacrificio(fecha, notas, cantidades) {
@@ -1494,9 +2105,15 @@ export default function Stock() {
         await entregarReproductor(b.animal, fecha, observaciones)
       } else {
         const cant = parseInt(cantidades?.[b.id]) || b.total
+        // Calcular machos/hembras entregados proporcionalmente
+        const totalJaula = b.jaula?.total || b.total
+        const machosEntregados  = b.jaula?.machos  != null ? Math.round(cant * (b.jaula.machos  / totalJaula)) : null
+        const hembraEntregadas  = b.jaula?.hembras != null ? cant - (machosEntregados ?? 0)                    : null
         await registrarEntrega({
           camada_id: b.camada.id,
           cantidad: cant,
+          machos: machosEntregados,
+          hembras: hembraEntregadas,
           fecha,
           observaciones: observaciones || null,
         })
@@ -1505,8 +2122,8 @@ export default function Stock() {
           if (resto <= 0) {
             await eliminarJaula(b.jaula.id)
           } else {
-            const nuevosMachos  = b.jaula.machos  != null ? Math.max(0, b.jaula.machos  - Math.round(cant * (b.jaula.machos  / b.jaula.total))) : null
-            const nuevasHembras = b.jaula.hembras != null ? Math.max(0, b.jaula.hembras - Math.round(cant * (b.jaula.hembras / b.jaula.total))) : null
+            const nuevosMachos  = b.jaula.machos  != null ? Math.max(0, b.jaula.machos  - (machosEntregados ?? 0)) : null
+            const nuevasHembras = b.jaula.hembras != null ? Math.max(0, b.jaula.hembras - (hembraEntregadas ?? 0)) : null
             await editarJaula({ ...b.jaula, total: resto, machos: nuevosMachos, hembras: nuevasHembras })
           }
         }
@@ -1574,14 +2191,44 @@ export default function Stock() {
     salirModoSeleccion()
   }
 
+  // Guardar planificación de apareamiento en Supabase
+  async function guardarPlanificacion(fechaPlanificada, observaciones) {
+    if (!machoSel || !hembraSel) return
+    const getNombre = (b) => b.tipo === 'reproductor'
+      ? b.animal.codigo
+      : `${b.madre?.codigo ?? '?'} × ${b.padre?.codigo ?? '?'}`
+    const plan = {
+      fecha_planificada: fechaPlanificada,
+      observaciones,
+      macho: {
+        bloqueId: machoSel.id,
+        tipo: machoSel.tipo,
+        codigo: getNombre(machoSel),
+        total: machoSel.total,
+        edad: machoSel.edad,
+      },
+      hembra: {
+        bloqueId: hembraSel.id,
+        tipo: hembraSel.tipo,
+        codigo: getNombre(hembraSel),
+        total: hembraSel.total,
+        edad: hembraSel.edad,
+      },
+      completado: false,
+    }
+    await guardarPlan(plan, bioterioActivo)
+    setModalPlanificar(false)
+    salirModoSeleccion()
+  }
+
 const btnTab = (v, label) => (
     <button
       onClick={() => setVista(v)}
       className="px-4 py-2 rounded-2xl text-3xs font-bold transition-all"
       style={
         vista === v && subVista === null
-          ? { background: 'rgba(64,196,255,0.15)', border: '1px solid rgba(64,196,255,0.4)', color: '#40c4ff' }
-          : { background: 'transparent', border: '1px solid rgba(30,51,82,0.6)', color: '#4a5f7a' }
+          ? { background: 'rgba(64,196,255,0.15)', border: '1px solid rgba(64,196,255,0.4)', color: tema.blue }
+          : { background: 'transparent', border: '1px solid rgba(30,51,82,0.6)', color: tema.textMuted }
       }
     >
       {label}
@@ -1595,7 +2242,7 @@ const btnTab = (v, label) => (
       style={
         subVista === v
           ? { background: `${color}18`, border: `1px solid ${color}50`, color }
-          : { background: 'transparent', border: `1px solid rgba(30,51,82,0.6)`, color: '#4a5f7a' }
+          : { background: 'transparent', border: `1px solid rgba(30,51,82,0.6)`, color: tema.textMuted }
       }
     >
       {label}
@@ -1604,18 +2251,18 @@ const btnTab = (v, label) => (
 
   if (subVista === 'entregas') {
     return (
-      <div className="p-4 md:p-6 space-y-5 min-0" style={{ background: '#050810' }}>
+      <div className="p-4 md:p-6 space-y-5 min-0" style={{ background: tema.bgMain }}>
         <div className="flex items-center gap-3">
           <div className="w-1.5 h-7 rounded-full" style={{ background: '#40c4ff', boxShadow: '0 0 8px rgba(64,196,255,0.5)' }} />
           <h1 className="text-xl font-bold text-white">Stock</h1>
         </div>
         <div className="flex gap-2 flex-wrap">
           {btnSubTab('entregas', '📦 Entregas', '#ffb300')}
-          {btnSubTab('sacrificios', '🗡 Sacrificios', '#ff6b80')}
+          {!esSubgrupoRatones && btnSubTab('sacrificios', '🗡 Sacrificios', '#ff6b80')}
           <button
             onClick={() => setSubVista(null)}
             className="px-4 py-2 rounded-2xl text-3xs font-bold"
-            style={{ background: 'transparent', border: '1px solid rgba(30,51,82,0.6)', color: '#4a5f7a' }}
+            style={{ background: 'transparent', border: '1px solid rgba(30,51,82,0.6)', color: tema.textMuted }}
           >
             ← Volver a Stock
           </button>
@@ -1627,18 +2274,18 @@ const btnTab = (v, label) => (
 
 if (subVista === 'sacrificios') {
     return (
-      <div className="p-4 md:p-6 space-y-5 min-0" style={{ background: '#050810' }}>
+      <div className="p-4 md:p-6 space-y-5 min-0" style={{ background: tema.bgMain }}>
         <div className="flex items-center gap-3">
           <div className="w-1.5 h-7 rounded-full" style={{ background: '#40c4ff', boxShadow: '0 0 8px rgba(64,196,255,0.5)' }} />
           <h1 className="text-xl font-bold text-white">Stock</h1>
         </div>
         <div className="flex gap-2 flex-wrap">
           {btnSubTab('entregas', '📦 Entregas', '#ffb300')}
-          {btnSubTab('sacrificios', '🗡 Sacrificios', '#ff6b80')}
+          {!esSubgrupoRatones && btnSubTab('sacrificios', '🗡 Sacrificios', '#ff6b80')}
           <button
             onClick={() => setSubVista(null)}
             className="px-4 py-2 rounded-2xl text-3xs font-bold"
-            style={{ background: 'transparent', border: '1px solid rgba(30,51,82,0.6)', color: '#4a5f7a' }}
+            style={{ background: 'transparent', border: '1px solid rgba(30,51,82,0.6)', color: tema.textMuted }}
           >
             ← Volver a Stock
           </button>
@@ -1649,7 +2296,7 @@ if (subVista === 'sacrificios') {
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-5 min-0" style={{ background: '#050810' }}>
+    <div className="p-4 md:p-6 space-y-5 min-0" style={{ background: tema.bgMain }}>
 
       {/* Header */}
       <div className="flex items-center gap-3">
@@ -1660,20 +2307,25 @@ if (subVista === 'sacrificios') {
       {/* ── TABS DE SUB-SECCIÓN ──────────────────────────────────────────── */}
       <div className="flex gap-2 flex-wrap">
         {btnSubTab('entregas', '📦 Entregas', '#ffb300')}
-        {btnSubTab('sacrificios', '🗡 Sacrificios', '#ff6b80')}
+        {!esSubgrupoRatones && btnSubTab('sacrificios', '🗡 Sacrificios', '#ff6b80')}
       </div>
 
       {/* ── RESUMEN SUPERIOR ───────────────────────────────────────────────── */}
       <div
         className="rounded-2xl px-5 py-4 space-y-3"
-        style={{ background: 'rgba(13,21,40,0.8)', border: '1px solid rgba(30,51,82,0.8)' }}
+        style={{ background: tema.bgCard, border: '1px solid rgba(30,51,82,0.8)' }}
       >
         {/* Totales */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <span className="font-mono text-sm font-bold text-white">
-            Total: <span style={{ color: '#40c4ff' }}>{resumen.totalAnimales}</span> animales
-            {' '}/ <span style={{ color: '#00e676' }}>{resumen.totalJaulas}</span> jaulas
+            Total: <span style={{ color: tema.blue }}>{resumen.totalAnimales}</span> animales
+            {' '}/ <span style={{ color: tema.accent }}>{resumen.totalJaulas}</span> jaulas ocupadas
           </span>
+          {resumen.femEnApareamiento > 0 && (
+            <span className="text-xs font-mono" style={{ color: '#3d5068' }}>
+              · {resumen.femEnApareamiento} jaula{resumen.femEnApareamiento !== 1 ? 's' : ''} temporalmente vacía{resumen.femEnApareamiento !== 1 ? 's' : ''} (hembra{resumen.femEnApareamiento !== 1 ? 's' : ''} en apareamiento)
+            </span>
+          )}
         </div>
         {/* Chips por categoría */}
         <div className="flex flex-wrap gap-2">
@@ -1694,8 +2346,8 @@ if (subVista === 'sacrificios') {
             onClick={() => modoSeleccion ? salirModoSeleccion() : setModoSeleccion(true)}
             className="px-4 py-2 rounded-xl text-xs font-bold transition-all ml-auto"
             style={modoSeleccion
-              ? { background: 'rgba(255,61,87,0.15)', border: '1px solid rgba(255,61,87,0.4)', color: '#ff6b80' }
-              : { background: 'transparent', border: '1px solid rgba(30,51,82,0.6)', color: '#4a5f7a' }}
+              ? { background: 'rgba(255,61,87,0.15)', border: '1px solid rgba(255,61,87,0.4)', color: tema.red }
+              : { background: 'transparent', border: '1px solid rgba(30,51,82,0.6)', color: tema.textMuted }}
           >
             {modoSeleccion ? '✕ Cancelar selección' : '☑ Seleccionar'}
           </button>
@@ -1718,7 +2370,7 @@ if (subVista === 'sacrificios') {
                   style={
                     activo
                       ? { background: `${color}18`, border: `1px solid ${color}45`, color }
-                      : { background: 'transparent', border: '1px solid rgba(30,51,82,0.6)', color: '#4a5f7a' }
+                      : { background: 'transparent', border: '1px solid rgba(30,51,82,0.6)', color: tema.textMuted }
                   }
                 >
                   {label} <span className="font-mono opacity-60">({count})</span>
@@ -1729,11 +2381,12 @@ if (subVista === 'sacrificios') {
 
           {/* Grid de bloques */}
           {bloquesFiltrados.length === 0 ? (
-            <div className="text-center py-16" style={{ color: '#4a5f7a' }}>
+            <div className="text-center py-16" style={{ color: tema.textMuted }}>
               <div className="text-4xl mb-3">📦</div>
               <div className="text-sm">Sin jaulas en esta categoría</div>
             </div>
-          ) : (
+          ) : filtroCat !== 'todas' ? (
+            /* Vista filtrada por categoría — grid simple sin subtítulos */
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
               {bloquesFiltrados.map((b) => (
                 <BloqueJaula
@@ -1741,10 +2394,61 @@ if (subVista === 'sacrificios') {
                   bloque={b}
                   camadas={camadas}
                   onClick={modoSeleccion ? toggleSeleccion : setDetalle}
+                  onEliminar={(b) => setJaulaAEliminar(b)}
                   modoSeleccion={modoSeleccion}
                   seleccionada={seleccionadas.has(b.id)}
+                  animalesReservados={animalesReservados}
+                  jaulasReservadas={jaulasReservadas}
+                  reservadosHibridos={reservadosHibridos}
                 />
               ))}
+            </div>
+          ) : (
+            /* Vista "Todas" — agrupado por categoría con subtítulos separadores */
+            <div className="space-y-6">
+              {ORDEN_CAT.map((cat) => {
+                const bloquesCat = bloquesFiltrados.filter((b) => b.categoria === cat)
+                if (bloquesCat.length === 0) return null
+                const cfg = CAT[cat]
+                const totalAnimalesCat = bloquesCat.reduce((s, b) => s + b.total, 0)
+                return (
+                  <div key={cat}>
+                    {/* Separador de categoría */}
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="h-px flex-1" style={{ background: `${cfg.color}28` }} />
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-xs font-bold uppercase tracking-widest" style={{ color: cfg.color }}>
+                          {cfg.icono} {cfg.label}
+                        </span>
+                        <span
+                          className="text-xs font-mono px-2 py-0.5 rounded-full"
+                          style={{ background: `${cfg.color}14`, color: cfg.color, border: `1px solid ${cfg.color}30` }}
+                        >
+                          {totalAnimalesCat} · {bloquesCat.length} {bloquesCat.length === 1 ? 'jaula' : 'jaulas'}
+                        </span>
+                      </div>
+                      <div className="h-px flex-1" style={{ background: `${cfg.color}28` }} />
+                    </div>
+                    {/* Grid de la categoría */}
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                      {bloquesCat.map((b) => (
+                        <BloqueJaula
+                          key={b.id}
+                          bloque={b}
+                          camadas={camadas}
+                          onClick={modoSeleccion ? toggleSeleccion : setDetalle}
+                          onEliminar={(b) => setJaulaAEliminar(b)}
+                          modoSeleccion={modoSeleccion}
+                          seleccionada={seleccionadas.has(b.id)}
+                          animalesReservados={animalesReservados}
+                          jaulasReservadas={jaulasReservadas}
+                          reservadosHibridos={reservadosHibridos}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
         </>
@@ -1761,8 +2465,8 @@ if (subVista === 'sacrificios') {
             >
               <span className="text-lg">🍼</span>
               <div>
-                <span className="font-semibold" style={{ color: '#ffb300' }}>{datosResumen.lactantes.total} crías lactantes</span>
-                <span className="ml-2" style={{ color: '#4a5f7a' }}>
+                <span className="font-semibold" style={{ color: tema.amber }}>{datosResumen.lactantes.total} crías lactantes</span>
+                <span className="ml-2" style={{ color: tema.textMuted }}>
                   en {datosResumen.lactantes.grupos} camada{datosResumen.lactantes.grupos !== 1 ? 's' : ''} — aún no destetadas
                 </span>
               </div>
@@ -1770,7 +2474,7 @@ if (subVista === 'sacrificios') {
           )}
 
           <div>
-            <div className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: '#4a5f7a' }}>Reproductores registrados</div>
+            <div className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: tema.textMuted }}>Reproductores registrados</div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <CategoriaCard icono="♀" titulo="Hembras reproductoras" subtitulo="Estado activo, en apareamiento o en cría" total={datosResumen.hembrasRepro.length} color="#ce93d8" />
               <CategoriaCard icono="♂" titulo="Machos reproductores"  subtitulo="Estado activo, en apareamiento o en cría" total={datosResumen.machosRepro.length}  color="#40c4ff" />
@@ -1778,18 +2482,23 @@ if (subVista === 'sacrificios') {
           </div>
 
           <div>
-            <div className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: '#4a5f7a' }}>Stock de camadas — por edad</div>
+            <div className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: tema.textMuted }}>Stock de camadas — por edad</div>
             <div className="space-y-3">
-              <CategoriaCard icono="🐣" titulo="Crías (post-destete)" subtitulo="21 días hasta 6 semanas" total={datosResumen.crias.total} grupos={datosResumen.crias.grupos} gruposLabel="Camadas" machos={datosResumen.crias.machos || undefined} hembras={datosResumen.crias.hembras || undefined} color="#00e676" descripcion="Destete completado · hasta 42 días" />
-              <CategoriaCard icono="🐭" titulo="Jóvenes" subtitulo="6 semanas hasta 12 semanas" total={datosResumen.jovenes.total} grupos={datosResumen.jovenes.grupos} gruposLabel="Camadas" machos={datosResumen.jovenes.machos || undefined} hembras={datosResumen.jovenes.hembras || undefined} color="#ffb300" descripcion="42 a 84 días · pre-madurez" />
-              <CategoriaCard icono="🐀" titulo="Adultos (no reproductores)" subtitulo="Más de 12 semanas" total={datosResumen.adultosNR.total} grupos={datosResumen.adultosNR.grupos} gruposLabel="Camadas" machos={datosResumen.adultosNR.machos || undefined} hembras={datosResumen.adultosNR.hembras || undefined} color="#ff6b80" descripcion="> 84 días · aptos para reproducción o retiro" />
+              {(() => {
+                const semanasAdultos = Math.round(bio.STOCK_ADULTOS_DIAS / 7)
+                return (<>
+                  <CategoriaCard icono="🐣" titulo="Crías (post-destete)" subtitulo={`${bio.DESTETE_DIAS} días hasta 6 semanas`} total={datosResumen.crias.total} grupos={datosResumen.crias.grupos} gruposLabel="Camadas" machos={datosResumen.crias.machos || undefined} hembras={datosResumen.crias.hembras || undefined} color="#00e676" descripcion={`Destete completado · hasta 42 días`} />
+                  <CategoriaCard icono="🐭" titulo="Jóvenes" subtitulo={`6 semanas hasta ${semanasAdultos} semanas`} total={datosResumen.jovenes.total} grupos={datosResumen.jovenes.grupos} gruposLabel="Camadas" machos={datosResumen.jovenes.machos || undefined} hembras={datosResumen.jovenes.hembras || undefined} color="#ffb300" descripcion={`42 a ${bio.STOCK_ADULTOS_DIAS} días · pre-madurez`} />
+                  <CategoriaCard icono="🐀" titulo="Adultos (no reproductores)" subtitulo={`Más de ${semanasAdultos} semanas`} total={datosResumen.adultosNR.total} grupos={datosResumen.adultosNR.grupos} gruposLabel="Camadas" machos={datosResumen.adultosNR.machos || undefined} hembras={datosResumen.adultosNR.hembras || undefined} color="#ff6b80" descripcion={`> ${bio.STOCK_ADULTOS_DIAS} días · aptos para reproducción o retiro`} />
+                </>)
+              })()}
             </div>
           </div>
 
           {resumen.totalAnimales === 0 && (
             <div className="rounded-xl p-10 text-center" style={{ background: 'rgba(64,196,255,0.04)', border: '1px solid rgba(64,196,255,0.15)' }}>
               <div className="text-3xl mb-2">📦</div>
-              <div className="font-semibold text-sm" style={{ color: '#40c4ff' }}>Sin stock registrado</div>
+              <div className="font-semibold text-sm" style={{ color: tema.blue }}>Sin stock registrado</div>
             </div>
           )}
         </div>
@@ -1812,8 +2521,8 @@ if (subVista === 'sacrificios') {
             <div className="flex items-center gap-3 text-sm font-mono">
               {reproSel.length > 0 && (
                 <span>
-                  <span style={{ color: '#ff6b80', fontWeight: 700 }}>{reproSel.length}</span>
-                  <span style={{ color: '#4a5f7a' }}> reproductor{reproSel.length !== 1 ? 'es' : ''}</span>
+                  <span style={{ color: tema.red, fontWeight: 700 }}>{reproSel.length}</span>
+                  <span style={{ color: tema.textMuted }}> reproductor{reproSel.length !== 1 ? 'es' : ''}</span>
                 </span>
               )}
               {reproSel.length > 0 && jaulasSel.length > 0 && (
@@ -1821,18 +2530,27 @@ if (subVista === 'sacrificios') {
               )}
               {jaulasSel.length > 0 && (
                 <span>
-                  <span style={{ color: '#ff6b80', fontWeight: 700 }}>{jaulasSel.length}</span>
-                  <span style={{ color: '#4a5f7a' }}> jaula{jaulasSel.length !== 1 ? 's' : ''}</span>
-                  <span style={{ color: '#4a5f7a' }}> ({jaulasSel.reduce((s,b) => s + b.total, 0)} animales)</span>
+                  <span style={{ color: tema.red, fontWeight: 700 }}>{jaulasSel.length}</span>
+                  <span style={{ color: tema.textMuted }}> jaula{jaulasSel.length !== 1 ? 's' : ''}</span>
+                  <span style={{ color: tema.textMuted }}> ({jaulasSel.reduce((s,b) => s + b.total, 0)} animales)</span>
                 </span>
               )}
             </div>
             <div style={{ width: '1px', height: '20px', background: 'rgba(30,51,82,0.8)' }} />
-            {jaulasSel.some((b) => !b.virtual) && (
+            {puedePlanificar && (
+              <button
+                onClick={() => setModalPlanificar(true)}
+                className="px-4 py-1.5 rounded-xl text-sm font-bold flex items-center gap-1.5"
+                style={{ background: 'rgba(64,196,255,0.1)', border: '1px solid rgba(64,196,255,0.4)', color: tema.blue, cursor: 'pointer' }}
+              >
+                🔗 Planificar apareamiento
+              </button>
+            )}
+            {!esHibridos && jaulasSel.some((b) => !b.virtual) && (
               <button
                 onClick={() => setModalPromover(true)}
                 className="px-4 py-1.5 rounded-xl text-sm font-bold flex items-center gap-1.5"
-                style={{ background: 'rgba(0,230,118,0.1)', border: '1px solid rgba(0,230,118,0.4)', color: '#00e676', cursor: 'pointer' }}
+                style={{ background: 'rgba(0,230,118,0.1)', border: '1px solid rgba(0,230,118,0.4)', color: tema.accent, cursor: 'pointer' }}
               >
                 <UserPlus size={14} /> Promover
               </button>
@@ -1840,14 +2558,14 @@ if (subVista === 'sacrificios') {
             <button
               onClick={() => setModalEntrega(true)}
               className="px-4 py-1.5 rounded-xl text-sm font-bold"
-              style={{ background: 'rgba(255,179,0,0.12)', border: '1px solid rgba(255,179,0,0.4)', color: '#ffb300', cursor: 'pointer' }}
+              style={{ background: 'rgba(255,179,0,0.12)', border: '1px solid rgba(255,179,0,0.4)', color: tema.amber, cursor: 'pointer' }}
             >
               📦 Entregar
             </button>
             <button
               onClick={() => setModalSacrificio(true)}
               className="px-4 py-1.5 rounded-xl text-sm font-bold"
-              style={{ background: 'rgba(255,61,87,0.15)', border: '1px solid rgba(255,61,87,0.5)', color: '#ff6b80', cursor: 'pointer' }}
+              style={{ background: 'rgba(255,61,87,0.15)', border: '1px solid rgba(255,61,87,0.5)', color: tema.red, cursor: 'pointer' }}
             >
               🗡 Sacrificar
             </button>
@@ -1861,12 +2579,13 @@ if (subVista === 'sacrificios') {
           bloque={detalle}
           jaulas={jaulas}
           camadas={camadas}
-          animales={animales}
+          animales={todosAnimales}
           onCerrar={() => setDetalle(null)}
           editarJaula={editarJaula}
           agregarJaula={agregarJaula}
           editarAnimal={editarAnimal}
-          onPromover={detalle.tipo === 'stock' && !detalle.virtual ? ejecutarPromoverDesdeModal : undefined}
+          onPromover={detalle.tipo === 'stock' && !detalle.virtual && !esHibridos ? ejecutarPromoverDesdeModal : undefined}
+          esHibridos={esHibridos}
         />
       )}
 
@@ -1876,6 +2595,9 @@ if (subVista === 'sacrificios') {
           bloques={bloques.filter((b) => seleccionadas.has(b.id))}
           onConfirmar={ejecutarSacrificio}
           onCerrar={() => setModalSacrificio(false)}
+          animalesReservados={animalesReservados}
+          jaulasReservadas={jaulasReservadas}
+          reservadosHibridos={reservadosHibridos}
         />
       )}
 
@@ -1885,6 +2607,18 @@ if (subVista === 'sacrificios') {
           bloques={bloques.filter((b) => seleccionadas.has(b.id))}
           onConfirmar={ejecutarEntrega}
           onCerrar={() => setModalEntrega(false)}
+          animalesReservados={animalesReservados}
+          jaulasReservadas={jaulasReservadas}
+          reservadosHibridos={reservadosHibridos}
+        />
+      )}
+
+      {/* Modal eliminar jaula individual */}
+      {jaulaAEliminar && (
+        <ModalEliminarJaula
+          bloque={jaulaAEliminar}
+          onConfirmar={() => { eliminarBloque(jaulaAEliminar); setJaulaAEliminar(null) }}
+          onCerrar={() => setJaulaAEliminar(null)}
         />
       )}
 
@@ -1895,6 +2629,16 @@ if (subVista === 'sacrificios') {
           animales={animales}
           onConfirmar={ejecutarPromoverMasivo}
           onCerrar={() => setModalPromover(false)}
+        />
+      )}
+
+      {/* Modal planificar apareamiento */}
+      {modalPlanificar && machoSel && hembraSel && (
+        <ModalPlanificarApareamiento
+          bloquesMacho={machoSel}
+          bloquesHembra={hembraSel}
+          onGuardar={guardarPlanificacion}
+          onCerrar={() => setModalPlanificar(false)}
         />
       )}
     </div>

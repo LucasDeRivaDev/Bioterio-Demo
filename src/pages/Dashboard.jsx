@@ -1,14 +1,17 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useBioterio } from '../context/BiotheriumContext'
 import { generarTareas, formatFecha, calcularRangoParto, difDias, parseDate, hoy, generarAlertasEstrales, generarAlertasMachos } from '../utils/calculos'
 import { INTERVALO_RENOVACION_DIAS } from '../utils/constants'
+import { getPlanes, completarPlan as completarPlanDB, eliminarPlan, getNotas, actualizarNota, eliminarNota as eliminarNotaDB } from '../utils/db'
+import { supabase } from '../lib/supabase'
 import Badge from '../components/Badge'
 import {
   Scissors, Baby, Package, Activity, FlaskConical, AlertCircle, RefreshCcw,
   Calendar, FileWarning, Thermometer, Microscope,
-  CheckCircle2, Layers, Link2, UserMinus,
+  CheckCircle2, Layers, Link2, UserMinus, Skull,
 } from 'lucide-react'
+import { useTheme } from '../context/ThemeContext'
 
 // Estilos por prioridad
 const PRIORIDAD = {
@@ -57,11 +60,13 @@ const ICONO_TIPO = {
   fin_ciclo:      <RefreshCcw size={17} />,
   evaluar_macho:  <UserMinus size={17} />,
   renovar_machos: <RefreshCcw size={17} />,
+  sacrificio_f1:  <Skull size={17} />,
 }
 
 // ── Tarjeta de tarea con acción inline para separaciones ─────────────────────
 
 function TarjetaTarea({ tarea, onConfirmarSeparacion, onDescartar }) {
+  const { tema } = useTheme()
   const est          = PRIORIDAD[tarea.prioridad]
   const esSeparacion = tarea.tipo === 'separacion'
 
@@ -111,7 +116,7 @@ function TarjetaTarea({ tarea, onConfirmarSeparacion, onDescartar }) {
               style={{
                 background: 'rgba(74,95,122,0.12)',
                 border: '1px solid rgba(74,95,122,0.25)',
-                color: '#4a5f7a',
+                color: tema.textMuted,
               }}
             >
               ✕
@@ -134,9 +139,9 @@ function TarjetaTarea({ tarea, onConfirmarSeparacion, onDescartar }) {
                 onChange={(e) => setFechaSep(e.target.value)}
                 className="px-2 py-1 text-xs rounded-lg font-mono focus:outline-none"
                 style={{
-                  background: 'rgba(8,13,26,0.8)',
+                  background: tema.bgInput,
                   border: `1px solid ${est.accionBorde}`,
-                  color: '#c9d4e0',
+                  color: tema.textPrimary,
                 }}
               />
               <button
@@ -156,7 +161,7 @@ function TarjetaTarea({ tarea, onConfirmarSeparacion, onDescartar }) {
               <button
                 onClick={() => setConfirmando(false)}
                 className="px-2 py-1 rounded-lg text-xs"
-                style={{ background: 'transparent', color: '#4a5f7a', border: '1px solid rgba(30,51,82,0.5)' }}
+                style={{ background: 'transparent', color: tema.textMuted, border: '1px solid rgba(30,51,82,0.5)' }}
               >
                 Cancelar
               </button>
@@ -184,6 +189,7 @@ function TarjetaTarea({ tarea, onConfirmarSeparacion, onDescartar }) {
 // ── Stat card ─────────────────────────────────────────────────────────────────
 
 function StatCard({ valor, label, icono, color }) {
+  const { tema } = useTheme()
   const colores = {
     verde:   { bg: 'rgba(0,230,118,0.08)',   borde: 'rgba(0,230,118,0.2)',   texto: '#00e676' },
     azul:    { bg: 'rgba(64,196,255,0.08)',  borde: 'rgba(64,196,255,0.2)',  texto: '#40c4ff' },
@@ -196,7 +202,7 @@ function StatCard({ valor, label, icono, color }) {
   return (
     <div
       className="rounded-xl p-4 flex items-center gap-4"
-      style={{ background: 'rgba(13,21,40,0.8)', border: `1px solid ${c.borde}` }}
+      style={{ background: tema.bgCard, border: `1px solid ${c.borde}` }}
     >
       <div
         className="w-11 h-11 rounded-xl flex items-center justify-center text-xl"
@@ -206,7 +212,7 @@ function StatCard({ valor, label, icono, color }) {
       </div>
       <div>
         <div className="text-2xl font-bold font-mono" style={{ color: c.texto }}>{valor}</div>
-        <div className="text-xs mt-0.5" style={{ color: '#4a5f7a' }}>{label}</div>
+        <div className="text-xs mt-0.5" style={{ color: tema.textMuted }}>{label}</div>
       </div>
     </div>
   )
@@ -214,19 +220,14 @@ function StatCard({ valor, label, icono, color }) {
 
 // ── Dashboard principal ───────────────────────────────────────────────────────
 
+// helpers LS eliminados — ahora usa db.js
+
+// ── Tareas descartadas ────────────────────────────────────────────────────────
+
 // Clave de localStorage para las tareas descartadas (permanente)
-const LS_KEY = 'demo_tareas_descartadas'
+const LS_KEY = 'appMosca_tareas_descartadas'
 
-// Clave para el recordatorio periódico de renovación de machos
-const LS_RENO_KEY = 'demo_machos_reno_ts'
-
-function debesMostrarRenovacion() {
-  try {
-    const last = localStorage.getItem(LS_RENO_KEY)
-    if (!last) return true
-    return difDias(parseDate(last), parseDate(hoy())) >= INTERVALO_RENOVACION_DIAS
-  } catch { return false }
-}
+// Renovación de machos — en Supabase para sincronizar entre usuarios
 
 function cargarDescartadas() {
   try {
@@ -239,7 +240,10 @@ function cargarDescartadas() {
 }
 
 export default function Dashboard() {
-  const { animales, camadas, extendidos, confirmarSeparacion, bio } = useBioterio()
+  const { tema, modoBrillo } = useTheme()
+  const { animales, animalesExportados, camadas, extendidos, confirmarSeparacion, bio, bioterioActivo } = useBioterio()
+  // En Híbridos los progenitores viven en animalesExportados — buscar en ambos
+  const todosAnimales = useMemo(() => [...animales, ...animalesExportados], [animales, animalesExportados])
 
   // IDs de tareas descartadas por el usuario hoy (se resetean el día siguiente)
   const [descartadas, setDescartadas] = useState(() => cargarDescartadas())
@@ -253,17 +257,118 @@ export default function Dashboard() {
     })
   }
 
-  const [mostrarRenovacion, setMostrarRenovacion] = useState(() => debesMostrarRenovacion())
+  const [mostrarRenovacion, setMostrarRenovacion] = useState(false)
 
-  function descartarRenovacion() {
-    localStorage.setItem(LS_RENO_KEY, hoy())
+  useEffect(() => {
+    async function cargarRenovacion() {
+      const { data } = await supabase
+        .from('configuracion')
+        .select('valor')
+        .eq('clave', 'machos_reno_ts')
+        .maybeSingle()
+      const last = data?.valor?.fecha ?? null
+      if (!last) { setMostrarRenovacion(true); return }
+      setMostrarRenovacion(difDias(parseDate(last), parseDate(hoy())) >= INTERVALO_RENOVACION_DIAS)
+    }
+    cargarRenovacion()
+  }, [])
+
+  // ── Planes de apareamiento ────────────────────────────────────────────────
+  const [planesApareamiento, setPlanesApareamiento] = useState([])
+
+  useEffect(() => {
+    if (bioterioActivo) setPlanesApareamiento(getPlanes(bioterioActivo))
+  }, [bioterioActivo])
+
+  // ── Notas / recordatorios ─────────────────────────────────────────────────
+  const [notasDash, setNotasDash] = useState([])
+
+  useEffect(() => {
+    if (bioterioActivo) setNotasDash(getNotas(bioterioActivo))
+  }, [bioterioActivo])
+
+  const alertasApareamiento = useMemo(() => {
+    const hoyStr = hoy()
+    return planesApareamiento
+      .filter((p) => !p.completado && p.fecha_planificada <= hoyStr)
+      .sort((a, b) => a.fecha_planificada.localeCompare(b.fecha_planificada))
+  }, [planesApareamiento])
+
+  const proximosApareamiento = useMemo(() => {
+    const hoyStr = hoy()
+    const limite = new Date(`${hoyStr}T12:00:00`)
+    limite.setDate(limite.getDate() + 7)
+    const limiteStr = limite.toISOString().slice(0, 10)
+    return planesApareamiento
+      .filter((p) => !p.completado && p.fecha_planificada > hoyStr && p.fecha_planificada <= limiteStr)
+      .sort((a, b) => a.fecha_planificada.localeCompare(b.fecha_planificada))
+  }, [planesApareamiento])
+
+  async function completarPlan(id) {
+    await completarPlanDB(id, bioterioActivo)
+    setPlanesApareamiento((prev) => prev.map((p) => p.id === id ? { ...p, completado: true } : p))
+  }
+
+  async function descartarPlan(id) {
+    await eliminarPlan(id, bioterioActivo)
+    setPlanesApareamiento((prev) => prev.filter((p) => p.id !== id))
+  }
+
+  const alertasNotas = useMemo(() => {
+    const hoyStr = hoy()
+    return notasDash
+      .filter((n) => !n.completada && n.fecha <= hoyStr)
+      .sort((a, b) => a.fecha.localeCompare(b.fecha))
+  }, [notasDash])
+
+  async function completarNotaDash(id) {
+    await actualizarNota(id, { completada: true }, bioterioActivo)
+    setNotasDash((prev) => prev.map((n) => n.id === id ? { ...n, completada: true } : n))
+  }
+
+  async function eliminarNotaDash(id) {
+    await eliminarNotaDB(id, bioterioActivo)
+    setNotasDash((prev) => prev.filter((n) => n.id !== id))
+  }
+
+  async function descartarRenovacion() {
     setMostrarRenovacion(false)
+    await supabase.from('configuracion').upsert(
+      { clave: 'machos_reno_ts', valor: { fecha: hoy() }, updated_at: new Date().toISOString() },
+      { onConflict: 'clave' }
+    )
   }
 
   const todasTareas = useMemo(() => generarTareas(camadas, animales, bio), [camadas, animales, bio])
   const alertasEstrales = useMemo(() => generarAlertasEstrales(animales, extendidos, bio), [animales, extendidos, bio])
   const alertasMachos   = useMemo(() => generarAlertasMachos(animales, camadas), [animales, camadas])
-  const tareas   = todasTareas.filter((t) => !descartadas.has(t.id))
+
+  // Alertas de crías F1 listas para sacrificio (solo en Híbridos, ≥40 días)
+  const tareasF1 = useMemo(() => {
+    if (bioterioActivo !== 'ratones_hibridos') return []
+    const hoyDate = parseDate(hoy())
+    return camadas
+      .filter((c) => c.fecha_nacimiento && !c.fecha_destete && !c.failure_flag && c.incluir_en_stock !== false)
+      .map((c) => {
+        const edad = difDias(parseDate(c.fecha_nacimiento), hoyDate)
+        if (edad < 40) return null
+        const madre = animalesExportados.find((a) => a.id === c.id_madre)
+        const padre = animalesExportados.find((a) => a.id === c.id_padre)
+        const progenitores = madre && padre ? `${madre.codigo} × ${padre.codigo}` : `camada ...${c.id.slice(-6)}`
+        return {
+          id: `f1-sacrificio-${c.id}`,
+          tipo: 'sacrificio_f1',
+          prioridad: edad >= 55 ? 'vencida' : edad >= 50 ? 'hoy' : 'proxima',
+          fecha: c.fecha_nacimiento,
+          descripcion: `Crías F1 listas para sacrificio — ${progenitores}`,
+          detalle: `${edad} días de edad. Recomendado sacrificio antes de los 55 días.`,
+          camadaId: c.id,
+        }
+      })
+      .filter(Boolean)
+  }, [bioterioActivo, camadas, animalesExportados])
+
+  const tareas   = [...todasTareas, ...tareasF1].filter((t) => !descartadas.has(t.id))
   const vencidas = tareas.filter((t) => t.prioridad === 'vencida')
   const deHoy    = tareas.filter((t) => t.prioridad === 'hoy')
   const proximas = tareas.filter((t) => t.prioridad === 'proxima')
@@ -291,9 +396,9 @@ export default function Dashboard() {
   const proximosPartos = camadas
     .filter((c) => c.fecha_copula && !c.fecha_nacimiento)
     .map((c) => {
-      const rango = calcularRangoParto(c.fecha_copula, bio)
+      const rango = calcularRangoParto(c.fecha_copula)
       if (!rango) return null
-      const madre = animales.find((a) => a.id === c.id_madre)
+      const madre = todosAnimales.find((a) => a.id === c.id_madre)
       return { camada: c, rango, madre, diasHasta: difDias(hoyDate, rango.partoMin) }
     })
     .filter(Boolean)
@@ -306,7 +411,7 @@ export default function Dashboard() {
   })
 
   return (
-    <div className="p-4 md:p-6 space-y-5 bg-dots min-h-screen" style={{ background: '#050810' }}>
+    <div className="p-4 md:p-6 space-y-5 bg-dots min-h-screen" style={{ background: tema.bgMain }}>
 
       {/* Header */}
       <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -314,38 +419,39 @@ export default function Dashboard() {
           <div className="flex items-center gap-3 mb-1 flex-wrap">
             <div
               className="w-2 h-8 rounded-full shrink-0"
-              style={{ background: '#00e676', boxShadow: '0 0 10px rgba(0,230,118,0.6)' }}
+              style={{ background: tema.accent, boxShadow: '0 0 10px rgba(0,230,118,0.6)' }}
             />
             <h1 className="text-xl md:text-2xl font-bold text-white tracking-tight">Panel de hoy</h1>
             {/* Links independientes */}
             <Link to="/calendario"
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold"
-              style={{ background: 'rgba(64,196,255,0.08)', border: '1px solid rgba(64,196,255,0.25)', color: '#40c4ff', textDecoration: 'none' }}
+              style={{ background: 'rgba(64,196,255,0.08)', border: '1px solid rgba(64,196,255,0.25)', color: tema.blue, textDecoration: 'none' }}
             >
               <Calendar size={13} /> Calendario
             </Link>
             <Link to="/incidentes"
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold"
-              style={{ background: 'rgba(255,179,0,0.08)', border: '1px solid rgba(255,179,0,0.25)', color: '#ffb300', textDecoration: 'none' }}
+              style={{ background: 'rgba(255,179,0,0.08)', border: '1px solid rgba(255,179,0,0.25)', color: tema.amber, textDecoration: 'none' }}
             >
               <FileWarning size={13} /> Incidentes
             </Link>
             <Link to="/temperatura"
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold"
-              style={{ background: 'rgba(255,87,51,0.08)', border: '1px solid rgba(255,87,51,0.25)', color: '#ff7043', textDecoration: 'none' }}
+              style={{ background: 'rgba(255,87,51,0.08)', border: '1px solid rgba(255,87,51,0.25)', color: tema.red, textDecoration: 'none' }}
             >
               <Thermometer size={13} /> Temperatura
             </Link>
+
           </div>
-          <p className="text-sm ml-5 capitalize" style={{ color: '#4a5f7a' }}>{fechaHoy}</p>
+          <p className="text-sm ml-5 capitalize" style={{ color: tema.textMuted }}>{fechaHoy}</p>
         </div>
         <div
           className="hidden md:flex items-center gap-2 px-4 py-2 rounded-full text-xs font-mono shrink-0"
-          style={{ background: 'rgba(0,230,118,0.07)', border: '1px solid rgba(0,230,118,0.2)', color: '#00e676' }}
+          style={{ background: 'rgba(0,230,118,0.07)', border: '1px solid rgba(0,230,118,0.2)', color: tema.accent }}
         >
           <span
             className="w-2 h-2 rounded-full pulse-soft"
-            style={{ background: '#00e676', boxShadow: '0 0 6px rgba(0,230,118,0.8)' }}
+            style={{ background: tema.accent, boxShadow: '0 0 6px rgba(0,230,118,0.8)' }}
           />
           SISTEMA ACTIVO
         </div>
@@ -363,7 +469,7 @@ export default function Dashboard() {
       {/* Alertas de ciclo estral y gestación */}
       {alertasEstrales.length > 0 && (
         <div>
-          <div className="text-xs font-semibold uppercase tracking-widest mb-3 flex items-center gap-2" style={{ color: '#ce93d8' }}>
+          <div className="text-xs font-semibold uppercase tracking-widest mb-3 flex items-center gap-2" style={{ color: tema.purple }}>
             🔬 Ciclo estral / gestación
           </div>
           <div className="space-y-2">
@@ -375,7 +481,7 @@ export default function Dashboard() {
                   <span style={{ color, fontSize: '16px' }}>
                     {a.tipo === 'critico' || a.tipo === 'alta' ? '⚠' : '○'}
                   </span>
-                  <span style={{ color: '#c9d4e0' }}>{a.mensaje}</span>
+                  <span style={{ color: tema.textPrimary }}>{a.mensaje}</span>
                 </div>
               )
             })}
@@ -386,7 +492,7 @@ export default function Dashboard() {
       {/* ── Control de machos reproductores ──────────────────────────────────── */}
       {(mostrarRenovacion || alertasMachos.length > 0) && (
         <div>
-          <div className="text-xs font-semibold uppercase tracking-widest mb-3 flex items-center gap-2" style={{ color: '#40c4ff' }}>
+          <div className="text-xs font-semibold uppercase tracking-widest mb-3 flex items-center gap-2" style={{ color: tema.blue }}>
             <UserMinus size={13} /> Control de machos
           </div>
           <div className="space-y-2">
@@ -398,12 +504,12 @@ export default function Dashboard() {
                 style={{ background: 'rgba(64,196,255,0.06)', border: '1px solid rgba(64,196,255,0.2)' }}
               >
                 <div className="flex items-start gap-3 min-w-0">
-                  <RefreshCcw size={17} style={{ color: '#40c4ff', marginTop: '2px', flexShrink: 0 }} />
+                  <RefreshCcw size={17} style={{ color: tema.blue, marginTop: '2px', flexShrink: 0 }} />
                   <div>
-                    <div className="font-semibold text-sm" style={{ color: '#40c4ff' }}>
+                    <div className="font-semibold text-sm" style={{ color: tema.blue }}>
                       Revisar y renovar stock de machos reproductores
                     </div>
-                    <div className="text-xs mt-0.5 opacity-70" style={{ color: '#40c4ff' }}>
+                    <div className="text-xs mt-0.5 opacity-70" style={{ color: tema.blue }}>
                       Recordatorio periódico (cada 5 meses) · Rango óptimo: 3–9 meses de edad
                     </div>
                   </div>
@@ -412,7 +518,7 @@ export default function Dashboard() {
                   onClick={descartarRenovacion}
                   title="Marcar como revisado"
                   className="w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 transition-all"
-                  style={{ background: 'rgba(64,196,255,0.1)', border: '1px solid rgba(64,196,255,0.25)', color: '#40c4ff' }}
+                  style={{ background: 'rgba(64,196,255,0.1)', border: '1px solid rgba(64,196,255,0.25)', color: tema.blue }}
                 >
                   ✓
                 </button>
@@ -461,10 +567,143 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* ── Notas / recordatorios del día ──────────────────────────────────── */}
+      {alertasNotas.length > 0 && (
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-widest mb-3 flex items-center gap-2" style={{ color: tema.amber }}>
+            📝 Recordatorios
+          </div>
+          <div className="space-y-2">
+            {alertasNotas.map((n) => {
+              const hoyStr = hoy()
+              const vencida = n.fecha < hoyStr
+              const color = vencida ? '#ff6b80' : '#fbbf24'
+              return (
+                <div key={n.id} className="rounded-xl px-4 py-3"
+                  style={{ background: `${color}08`, border: `1px solid ${color}30` }}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 space-y-0.5">
+                      <div className="font-semibold text-sm" style={{ color }}>
+                        {vencida ? '⚠️ Recordatorio vencido' : '📝 Recordatorio de hoy'}
+                      </div>
+                      {n.titulo && (
+                        <div className="text-xs font-bold" style={{ color }}>{n.titulo}</div>
+                      )}
+                      <div className="text-xs" style={{ color: tema.textPrimary }}>{n.descripcion}</div>
+                      {vencida && (
+                        <div className="text-xs font-mono" style={{ color: 'rgba(138,155,176,0.4)' }}>
+                          Fecha: {n.fecha.split('-').reverse().join('/')}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-1.5 shrink-0">
+                      <button onClick={() => completarNotaDash(n.id)}
+                        className="px-3 py-1 rounded-lg text-xs font-bold"
+                        style={{ background: 'rgba(0,230,118,0.1)', border: '1px solid rgba(0,230,118,0.3)', color: tema.accent, cursor: 'pointer' }}>
+                        ✓ Hecho
+                      </button>
+                      <button onClick={() => eliminarNotaDash(n.id)}
+                        className="px-3 py-1 rounded-lg text-xs font-semibold"
+                        style={{ background: 'rgba(138,155,176,0.06)', border: '1px solid rgba(138,155,176,0.2)', color: tema.textMuted, cursor: 'pointer' }}>
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Apareamientos planificados ──────────────────────────────────────── */}
+      {(alertasApareamiento.length > 0 || proximosApareamiento.length > 0) && (
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-widest mb-3 flex items-center gap-2" style={{ color: tema.blue }}>
+            🔗 Apareamientos planificados
+          </div>
+          <div className="space-y-2">
+
+            {/* Alertas de hoy / vencidas */}
+            {alertasApareamiento.map((plan) => {
+              const vencida = plan.fecha_planificada < hoy()
+              const color = vencida ? '#ff6b80' : '#ffb300'
+              return (
+                <div key={plan.id} className="rounded-xl px-4 py-3"
+                  style={{ background: `${color}08`, border: `1px solid ${color}30` }}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 space-y-1">
+                      <div className="font-semibold text-sm" style={{ color }}>
+                        {vencida ? '⚠️ Apareamiento pendiente' : '🔗 Realizar apareamiento hoy'}
+                      </div>
+                      <div className="text-xs" style={{ color: tema.textPrimary }}>
+                        Tomar machos de{' '}
+                        <span className="font-mono" style={{ color: tema.blue }}>{plan.macho.codigo}</span>
+                        {plan.macho.total > 0 && (
+                          <span style={{ color: tema.textMuted }}> ({plan.macho.total} disp.)</span>
+                        )}
+                        {' '}y hembras de{' '}
+                        <span className="font-mono" style={{ color: tema.purple }}>{plan.hembra.codigo}</span>
+                        {plan.hembra.total > 0 && (
+                          <span style={{ color: tema.textMuted }}> ({plan.hembra.total} disp.)</span>
+                        )}
+                      </div>
+                      {plan.observaciones && (
+                        <div className="text-xs" style={{ color: tema.textMuted }}>{plan.observaciones}</div>
+                      )}
+                      <div className="text-xs font-mono" style={{ color: 'rgba(138,155,176,0.4)' }}>
+                        Planificado para: {formatFecha(plan.fecha_planificada)}
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-1.5 shrink-0">
+                      <button onClick={() => completarPlan(plan.id)}
+                        className="px-3 py-1 rounded-lg text-xs font-bold"
+                        style={{ background: 'rgba(0,230,118,0.1)', border: '1px solid rgba(0,230,118,0.3)', color: tema.accent, cursor: 'pointer' }}>
+                        ✓ Hecho
+                      </button>
+                      <button onClick={() => descartarPlan(plan.id)}
+                        className="px-3 py-1 rounded-lg text-xs font-semibold"
+                        style={{ background: 'rgba(138,155,176,0.06)', border: '1px solid rgba(138,155,176,0.2)', color: tema.textMuted, cursor: 'pointer' }}>
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+
+            {/* Próximos 7 días */}
+            {proximosApareamiento.map((plan) => (
+              <div key={plan.id} className="rounded-xl px-4 py-3 flex items-center justify-between gap-3"
+                style={{ background: 'rgba(64,196,255,0.04)', border: '1px solid rgba(64,196,255,0.15)' }}>
+                <div className="min-w-0 space-y-0.5">
+                  <div className="text-xs font-semibold" style={{ color: tema.blue }}>
+                    Cruce planificado · {formatFecha(plan.fecha_planificada)}
+                  </div>
+                  <div className="text-xs" style={{ color: tema.textMuted }}>
+                    <span className="font-mono" style={{ color: tema.blue }}>{plan.macho.codigo}</span>
+                    {' '}×{' '}
+                    <span className="font-mono" style={{ color: tema.purple }}>{plan.hembra.codigo}</span>
+                    {plan.observaciones && <span> · {plan.observaciones}</span>}
+                  </div>
+                </div>
+                <button onClick={() => descartarPlan(plan.id)}
+                  title="Eliminar plan"
+                  className="w-6 h-6 rounded-lg flex items-center justify-center text-xs shrink-0"
+                  style={{ background: 'rgba(74,95,122,0.1)', border: '1px solid rgba(74,95,122,0.2)', color: tema.textMuted, cursor: 'pointer' }}>
+                  ✕
+                </button>
+              </div>
+            ))}
+
+          </div>
+        </div>
+      )}
+
       {/* Alertas urgentes */}
       {(vencidas.length > 0 || deHoy.length > 0) && (
         <div>
-          <div className="text-xs font-semibold uppercase tracking-widest mb-3 flex items-center gap-2" style={{ color: '#ff6b80' }}>
+          <div className="text-xs font-semibold uppercase tracking-widest mb-3 flex items-center gap-2" style={{ color: tema.red }}>
             <span className="pulse-soft">●</span> Atención inmediata
           </div>
           <div className="space-y-2">
@@ -484,16 +723,16 @@ export default function Dashboard() {
           className="rounded-xl p-6 text-center"
           style={{ background: 'rgba(0,230,118,0.05)', border: '1px solid rgba(0,230,118,0.15)' }}
         >
-          <div className="flex justify-center mb-2"><CheckCircle2 size={32} style={{ color: '#00e676' }} /></div>
-          <div className="font-semibold text-sm" style={{ color: '#00e676' }}>Sin tareas urgentes hoy</div>
-          <div className="text-xs mt-1" style={{ color: '#4a5f7a' }}>La colonia está bajo control</div>
+          <div className="flex justify-center mb-2"><CheckCircle2 size={32} style={{ color: tema.accent }} /></div>
+          <div className="font-semibold text-sm" style={{ color: tema.accent }}>Sin tareas urgentes hoy</div>
+          <div className="text-xs mt-1" style={{ color: tema.textMuted }}>La colonia está bajo control</div>
         </div>
       )}
 
       {/* Próximas tareas */}
       {proximas.length > 0 && (
         <div>
-          <div className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: '#4a5f7a' }}>
+          <div className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: tema.textMuted }}>
             Próximos 7 días
           </div>
           <div className="space-y-2">
@@ -507,13 +746,13 @@ export default function Dashboard() {
       {/* Seguimiento de preñeces */}
       {proximosPartos.length > 0 && (
         <div>
-          <div className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: '#4a5f7a' }}>
+          <div className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: tema.textMuted }}>
             <FlaskConical size={13} style={{ display: 'inline', marginRight: '4px' }} />
             Seguimiento de preñeces activas
           </div>
           <div
             className="rounded-xl overflow-hidden"
-            style={{ background: 'rgba(13,21,40,0.8)', border: '1px solid rgba(30,51,82,0.8)' }}
+            style={{ background: tema.bgCard, border: '1px solid rgba(30,51,82,0.8)' }}
           >
             <div className="overflow-x-auto">
               <table className="w-full text-sm" style={{ minWidth: '480px' }}>
@@ -521,7 +760,7 @@ export default function Dashboard() {
                   <tr style={{ borderBottom: '1px solid rgba(0,230,118,0.1)', background: 'rgba(0,230,118,0.03)' }}>
                     {['Hembra', 'Cópula', 'Ventana de parto', 'Estado'].map((h) => (
                       <th key={h} className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-widest"
-                        style={{ color: '#4a5f7a' }}>{h}</th>
+                        style={{ color: tema.textMuted }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -532,13 +771,13 @@ export default function Dashboard() {
                       style={{ borderBottom: '1px solid rgba(30,51,82,0.4)' }}
                       className="transition-colors hover:bg-white/[0.01]"
                     >
-                      <td className="px-4 py-3 font-mono font-semibold" style={{ color: '#ce93d8' }}>
+                      <td className="px-4 py-3 font-mono font-semibold" style={{ color: tema.purple }}>
                         {madre?.codigo ?? '?'}
                       </td>
-                      <td className="px-4 py-3 font-mono text-xs" style={{ color: '#4a5f7a' }}>
+                      <td className="px-4 py-3 font-mono text-xs" style={{ color: tema.textMuted }}>
                         {formatFecha(camada.fecha_copula)}
                       </td>
-                      <td className="px-4 py-3 font-mono text-xs" style={{ color: '#8a9bb0' }}>
+                      <td className="px-4 py-3 font-mono text-xs" style={{ color: tema.textSecondary }}>
                         {formatFecha(rango.partoMin)} — {formatFecha(rango.partoMax)}
                       </td>
                       <td className="px-4 py-3">
@@ -565,13 +804,13 @@ export default function Dashboard() {
       {animales.length === 0 && (
         <div
           className="rounded-xl p-12 text-center"
-          style={{ background: 'rgba(13,21,40,0.5)', border: '1px dashed rgba(30,51,82,0.8)' }}
+          style={{ background: tema.bgCard, border: '1px dashed rgba(30,51,82,0.8)' }}
         >
-          <div className="flex justify-center mb-4"><Microscope size={48} style={{ color: '#4a5f7a' }} /></div>
+          <div className="flex justify-center mb-4"><Microscope size={48} style={{ color: tema.textMuted }} /></div>
           <div className="font-semibold text-white mb-1">Bioterio vacío</div>
-          <div className="text-sm" style={{ color: '#4a5f7a' }}>
+          <div className="text-sm" style={{ color: tema.textMuted }}>
             Empezá agregando animales en la sección{' '}
-            <span style={{ color: '#00e676' }}>Reproductores</span>
+            <span style={{ color: tema.accent }}>Reproductores</span>
           </div>
         </div>
       )}

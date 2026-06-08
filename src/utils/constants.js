@@ -2,7 +2,8 @@
 export const BIO_RATAS = {
   GESTACION_DIAS: 23,
   DESTETE_DIAS: 21,
-  MADUREZ_DIAS: 84,                 // 12 semanas
+  MADUREZ_DIAS: 84,                 // 12 semanas — madurez sexual real
+  STOCK_ADULTOS_DIAS: 84,           // 12 semanas — umbral crías→jóvenes→adultos en stock
   CICLO_ESTRAL_DIAS: 5,
   VENTANA_CONCEPCION_MIN: 1,
   VENTANA_CONCEPCION_MAX: 5,
@@ -13,7 +14,8 @@ export const BIO_RATAS = {
 export const BIO_RATONES = {
   GESTACION_DIAS: 21,
   DESTETE_DIAS: 21,
-  MADUREZ_DIAS: 56,                 // 8 semanas
+  MADUREZ_DIAS: 56,                 // 8 semanas — madurez sexual real
+  STOCK_ADULTOS_DIAS: 70,           // 10 semanas — umbral crías→jóvenes→adultos en stock
   CICLO_ESTRAL_DIAS: 5,
   VENTANA_CONCEPCION_MIN: 1,
   VENTANA_CONCEPCION_MAX: 5,
@@ -56,6 +58,7 @@ export const TIPO_TAREA = {
   FIN_CICLO: 'fin_ciclo',           // 3er apareamiento completado → recomendar descarte
   EVALUAR_MACHO: 'evaluar_macho',   // macho alcanzó edad límite o baja performance
   RENOVAR_MACHOS: 'renovar_machos', // recordatorio periódico de renovación del stock de machos
+  SACRIFICIO_F1: 'sacrificio_f1',   // crías F1 de Híbridos alcanzaron edad de sacrificio (≥40 días)
 }
 
 export const PRIORIDAD = {

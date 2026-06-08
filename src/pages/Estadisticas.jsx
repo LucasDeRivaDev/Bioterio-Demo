@@ -5,6 +5,7 @@ import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis,
   CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
+import { useTheme } from '../context/ThemeContext'
 
 // ── Paleta ────────────────────────────────────────────────────────────────────
 const C = {
@@ -40,33 +41,17 @@ function nivelScore(s) {
   return 'Baja'
 }
 
-// ── Estilos reutilizables ──────────────────────────────────────────────────────
-const card = {
-  background: 'rgba(13,21,40,0.9)',
-  border: '1px solid rgba(30,51,82,0.8)',
-  borderRadius: '16px',
-  padding: '20px',
-}
-
-const inputStyle = {
-  background: 'rgba(8,13,26,0.8)',
-  border: '1px solid rgba(30,51,82,0.8)',
-  color: '#c9d4e0',
-  borderRadius: '10px',
-  padding: '6px 10px',
-  fontSize: '13px',
-  outline: 'none',
-}
 
 // ── Tooltip personalizado ─────────────────────────────────────────────────────
 function TooltipOscuro({ active, payload, label }) {
+  const { tema } = useTheme()
   if (!active || !payload?.length) return null
   return (
     <div
       className="rounded-xl px-3 py-2 text-xs"
-      style={{ background: 'rgba(8,13,26,0.97)', border: '1px solid rgba(30,51,82,0.9)', color: '#c9d4e0' }}
+      style={{ background: tema.bgCard, border: '1px solid rgba(30,51,82,0.9)', color: tema.textPrimary }}
     >
-      {label && <div className="font-bold mb-1" style={{ color: '#8a9bb0' }}>{label}</div>}
+      {label && <div className="font-bold mb-1" style={{ color: tema.textSecondary }}>{label}</div>}
       {payload.map((p, i) => (
         <div key={i} className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full" style={{ background: p.fill ?? p.color }} />
@@ -80,13 +65,14 @@ function TooltipOscuro({ active, payload, label }) {
 
 // ── KPI ───────────────────────────────────────────────────────────────────────
 function KPI({ label, valor, color = '#c9d4e0', sub }) {
+  const { tema } = useTheme()
   return (
     <div
       className="rounded-xl px-4 py-3 text-center"
-      style={{ background: 'rgba(13,21,40,0.8)', border: `1px solid ${color}28` }}
+      style={{ background: tema.bgCard, border: `1px solid ${color}28` }}
     >
       <div className="text-2xl font-mono font-bold" style={{ color }}>{valor}</div>
-      <div className="text-xs mt-1 font-semibold uppercase tracking-widest" style={{ color: '#4a5f7a' }}>{label}</div>
+      <div className="text-xs mt-1 font-semibold uppercase tracking-widest" style={{ color: tema.textMuted }}>{label}</div>
       {sub && <div className="text-xs mt-0.5" style={{ color: '#2a3a50' }}>{sub}</div>}
     </div>
   )
@@ -94,11 +80,12 @@ function KPI({ label, valor, color = '#c9d4e0', sub }) {
 
 // ── Encabezado de cada gráfico ────────────────────────────────────────────────
 function GraficoCard({ titulo, subtitulo, children, color = C.azul }) {
+  const { tema } = useTheme()
   return (
     <div style={card}>
       <div className="mb-4">
         <div className="text-sm font-bold" style={{ color }}>{titulo}</div>
-        {subtitulo && <div className="text-xs mt-0.5" style={{ color: '#4a5f7a' }}>{subtitulo}</div>}
+        {subtitulo && <div className="text-xs mt-0.5" style={{ color: tema.textMuted }}>{subtitulo}</div>}
       </div>
       {children}
     </div>
@@ -146,7 +133,18 @@ function SinDatos() {
 
 // ── PÁGINA PRINCIPAL ──────────────────────────────────────────────────────────
 export default function Estadisticas() {
-  const { camadas, animales, bio } = useBioterio()
+  const { tema, modoBrillo } = useTheme()
+  const card = { background: tema.bgCard, border: `1px solid ${tema.bgCardBorde}`, borderRadius: '16px', padding: '20px' }
+  const inputStyle = {
+    background: tema.bgInput,
+    border: '1px solid rgba(30,51,82,0.8)',
+    color: tema.textPrimary,
+    borderRadius: '10px',
+    padding: '6px 10px',
+    fontSize: '13px',
+    outline: 'none',
+  }
+  const { camadas, camadasF1, animales, animalesExportados, bio, bioterioActivo } = useBioterio()
 
   // ── Filtros ────────────────────────────────────────────────────────────────
   const [desde,         setDesde]         = useState('')
@@ -154,12 +152,19 @@ export default function Estadisticas() {
   const [filtroMadreId, setFiltroMadreId] = useState('')
   const [filtroPadreId, setFiltroPadreId] = useState('')
 
-  const hembras = animales.filter((a) => a.sexo === 'hembra')
-  const machos  = animales.filter((a) => a.sexo === 'macho')
+  // En Híbridos los reproductores reales (padres de las camadas F1) son los
+  // animalesExportados (machos BAL/C + hembras C57), no las crías F1.
+  // Los dropdowns de filtro deben mostrar esos animales.
+  const esHibridos = bioterioActivo === 'ratones_hibridos'
+  const animalesParaFiltros = esHibridos ? animalesExportados : animales
+  const todasCamadas = camadasF1.length > 0 ? [...camadas, ...camadasF1] : camadas
+
+  const hembras = animalesParaFiltros.filter((a) => a.sexo === 'hembra')
+  const machos  = animalesParaFiltros.filter((a) => a.sexo === 'macho')
 
   // ── Camadas filtradas ──────────────────────────────────────────────────────
   const camadasFiltradas = useMemo(() => {
-    return camadas.filter((c) => {
+    return todasCamadas.filter((c) => {
       if (!c.fecha_copula) return false
       if (desde && c.fecha_copula < desde) return false
       if (hasta && c.fecha_copula > hasta) return false
@@ -167,7 +172,7 @@ export default function Estadisticas() {
       if (filtroPadreId && c.id_padre !== filtroPadreId) return false
       return true
     })
-  }, [camadas, desde, hasta, filtroMadreId, filtroPadreId])
+  }, [todasCamadas, desde, hasta, filtroMadreId, filtroPadreId])
 
   // ── 1. Partos vs Fallas ────────────────────────────────────────────────────
   const dataPartos = useMemo(() => {
@@ -195,7 +200,7 @@ export default function Estadisticas() {
     const idsMadres = [...new Set(camadasFiltradas.map((c) => c.id_madre).filter(Boolean))]
     const niveles = { Alta: 0, Media: 0, Baja: 0, 'En proceso': 0 }
     idsMadres.forEach((id) => {
-      const s = scorePromedioHembra(id, camadas) // score histórico completo
+      const s = scorePromedioHembra(id, todasCamadas) // score histórico completo
       const nivel = nivelScore(s)
       niveles[nivel === 'Sin datos' ? 'En proceso' : nivel]++
     })
@@ -205,7 +210,7 @@ export default function Estadisticas() {
       { name: 'Baja',       value: niveles['Baja'],       fill: C.rojo     },
       { name: 'En proceso', value: niveles['En proceso'], fill: C.gris     },
     ].filter((d) => d.value > 0)
-  }, [camadasFiltradas, camadas])
+  }, [camadasFiltradas, todasCamadas])
 
   // ── 3. Supervivencia ───────────────────────────────────────────────────────
   const dataSupervivencia = useMemo(() => {
@@ -255,13 +260,13 @@ export default function Estadisticas() {
   const hayFiltros = desde || hasta || filtroMadreId || filtroPadreId
 
   return (
-    <div className="p-4 md:p-6 space-y-6" style={{ background: '#050810', minHeight: '100vh' }}>
+    <div className="p-4 md:p-6 space-y-6" style={{ background: tema.bgMain, minHeight: '100vh' }}>
 
       {/* Encabezado */}
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-bold text-white tracking-wide">Estadísticas</h1>
-          <p className="text-xs mt-1" style={{ color: '#4a5f7a' }}>
+          <p className="text-xs mt-1" style={{ color: tema.textMuted }}>
             Indicadores reproductivos de la colonia
           </p>
         </div>
@@ -269,7 +274,7 @@ export default function Estadisticas() {
           <button
             onClick={() => { setDesde(''); setHasta(''); setFiltroMadreId(''); setFiltroPadreId('') }}
             className="text-xs px-3 py-1.5 rounded-lg"
-            style={{ background: 'rgba(255,61,87,0.08)', border: '1px solid rgba(255,61,87,0.25)', color: '#ff6b80', cursor: 'pointer' }}
+            style={{ background: 'rgba(255,61,87,0.08)', border: '1px solid rgba(255,61,87,0.25)', color: tema.red, cursor: 'pointer' }}
           >
             ✕ Limpiar filtros
           </button>
@@ -279,24 +284,24 @@ export default function Estadisticas() {
       {/* Filtros */}
       <div
         className="rounded-2xl p-4 grid grid-cols-2 md:grid-cols-4 gap-3"
-        style={{ background: 'rgba(13,21,40,0.8)', border: '1px solid rgba(30,51,82,0.6)' }}
+        style={{ background: tema.bgCard, border: '1px solid rgba(30,51,82,0.6)' }}
       >
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-widest mb-1.5" style={{ color: '#4a5f7a' }}>
+          <label className="block text-xs font-semibold uppercase tracking-widest mb-1.5" style={{ color: tema.textMuted }}>
             Desde
           </label>
           <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)}
             className="w-full" style={inputStyle} />
         </div>
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-widest mb-1.5" style={{ color: '#4a5f7a' }}>
+          <label className="block text-xs font-semibold uppercase tracking-widest mb-1.5" style={{ color: tema.textMuted }}>
             Hasta
           </label>
           <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)}
             className="w-full" style={inputStyle} />
         </div>
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-widest mb-1.5" style={{ color: '#ce93d8' }}>
+          <label className="block text-xs font-semibold uppercase tracking-widest mb-1.5" style={{ color: tema.purple }}>
             ♀ Madre
           </label>
           <select value={filtroMadreId} onChange={(e) => setFiltroMadreId(e.target.value)}
@@ -306,7 +311,7 @@ export default function Estadisticas() {
           </select>
         </div>
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-widest mb-1.5" style={{ color: '#40c4ff' }}>
+          <label className="block text-xs font-semibold uppercase tracking-widest mb-1.5" style={{ color: tema.blue }}>
             ♂ Padre
           </label>
           <select value={filtroPadreId} onChange={(e) => setFiltroPadreId(e.target.value)}

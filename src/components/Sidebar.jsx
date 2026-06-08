@@ -1,26 +1,32 @@
 import { useState } from 'react'
-import { NavLink } from 'react-router-dom'
-import { useBioterio } from '../context/BiotheriumContextPro'
-import { useEspecie } from '../context/EspecieContext'
+import { NavLink, useLocation } from 'react-router-dom'
+import { useBioterio } from '../context/BiotheriumContext'
+import { useBioterioActivo } from '../context/BioterioActivoContext'
+import { useAuth } from '../context/AuthContext'
+import { useTheme } from '../context/ThemeContext'
 import {
-  LayoutDashboard, Printer, Dna, RefreshCw, BookOpen, Wheat, Layers,
-  Microscope, Archive, BarChart2, ChevronDown,
-  PackageCheck, Skull, TrendingUp,
+  Home, LayoutDashboard, Printer, Bug, Send, LogOut, ChevronUp, ChevronDown,
+  Dna, Microscope, Archive, BarChart2, PackageCheck, Skull, TrendingUp,
+  Target, ClipboardList, ScanSearch, Lock,
 } from 'lucide-react'
-import GenERatsBrand from './GenERatsBrand'
+import iterateNavLogo      from '../assets/logoiterate.png'
+import iterateNavLogoLight from '../assets/logoiteratefondoclaro.png'
 
-// ── Links simples ─────────────────────────────────────────────────────────────
-const NAV_LINKS = [
-  { to: '/',          label: 'Panel de hoy',     icon: <LayoutDashboard size={15} /> },
+const LINK_INICIO    = { to: '/inicio', label: 'Inicio',       icon: <Home size={15} /> }
+const LINK_DASHBOARD = { to: '/',       label: 'Panel de hoy', icon: <LayoutDashboard size={15} /> }
+const LINK_REPORTES  = { to: '/reportes', label: 'Reportes e impresión', icon: <Printer size={15} /> }
+
+const BLOQUEADAS = [
+  { label: 'Planificación', icon: <Target size={15} /> },
+  { label: 'Pedidos',       icon: <ClipboardList size={15} /> },
+  { label: 'Auditoría',     icon: <ScanSearch size={15} /> },
 ]
 
-// ── Grupos con submenús ───────────────────────────────────────────────────────
-const NAV_GRUPOS = [
+const GRUPOS = [
   {
     to: '/animales',
     label: 'Reproductores',
     icon: <Microscope size={15} />,
-    color: '#ce93d8',
     hijos: [
       { to: '/camadas', label: 'Emparejamientos', icon: <Dna size={13} /> },
     ],
@@ -29,7 +35,6 @@ const NAV_GRUPOS = [
     to: '/stock',
     label: 'Stock',
     icon: <Archive size={15} />,
-    color: '#40c4ff',
     hijos: [
       { to: '/entregas',    label: 'Entregas',    icon: <PackageCheck size={13} /> },
       { to: '/sacrificios', label: 'Sacrificios', icon: <Skull size={13} /> },
@@ -39,60 +44,39 @@ const NAV_GRUPOS = [
     to: '/rendimiento',
     label: 'Rendimiento',
     icon: <BarChart2 size={15} />,
-    color: '#ff9800',
     hijos: [
       { to: '/estadisticas', label: 'Estadísticas', icon: <TrendingUp size={13} /> },
     ],
   },
 ]
 
-// ── Links simples al final ────────────────────────────────────────────────────
-const NAV_LINKS_CONSUMO = [
-  { to: '/alimento',  label: 'Consumo alimento', icon: <Wheat size={15} /> },
-  { to: '/viruta',    label: 'Consumo viruta',   icon: <Layers size={15} /> },
-]
-
-const NAV_LINKS_FINAL = [
-  { to: '/reportes',  label: 'Reportes',         icon: <Printer size={15} /> },
-  { to: '/tutorial',  label: 'Tutorial',         icon: <BookOpen size={15} /> },
-]
-
-// ── Estilos comunes ───────────────────────────────────────────────────────────
-const styleActivo = {
-  display: 'flex', alignItems: 'center', gap: '10px',
-  padding: '8px 12px', borderRadius: '10px',
-  background: 'rgba(0,230,118,0.12)',
-  color: '#00e676',
-  border: '1px solid rgba(0,230,118,0.25)',
-  boxShadow: '0 0 12px rgba(0,230,118,0.1)',
-  fontSize: '13px', fontWeight: 600, textDecoration: 'none',
-}
-const styleInactivo = {
-  display: 'flex', alignItems: 'center', gap: '10px',
-  padding: '8px 12px', borderRadius: '10px',
-  color: '#8a9bb0',
-  border: '1px solid transparent',
-  fontSize: '13px', fontWeight: 500, textDecoration: 'none',
-}
-
-// ── Componente grupo acordeón ─────────────────────────────────────────────────
 function NavGrupo({ grupo, onCerrarMenu }) {
-  const [abierto, setAbierto] = useState(false)
+  const location = useLocation()
+  const { tema } = useTheme()
+  const rutasGrupo = [grupo.to, ...grupo.hijos.map((h) => h.to)]
+  const estaActivo = rutasGrupo.some((r) => location.pathname === r)
+  const [abierto, setAbierto] = useState(estaActivo)
 
   return (
     <div>
-      {/* Fila principal: link al padre + botón toggle */}
-      <div className="flex items-center rounded-xl overflow-hidden"
-        style={{ border: '1px solid transparent' }}
+      <div
+        className="flex items-center rounded-[10px] overflow-hidden"
+        style={estaActivo
+          ? { background: tema.greenDim, border: `1px solid ${tema.greenBorde}`, boxShadow: '0 0 12px rgba(0,180,100,0.1)' }
+          : { border: '1px solid transparent' }
+        }
       >
         <NavLink
           to={grupo.to}
+          end
           onClick={onCerrarMenu}
-          className="flex-1"
-          style={({ isActive }) => isActive
-            ? { ...styleActivo, borderRadius: '10px 0 0 10px', border: 'none', boxShadow: 'none', background: 'rgba(0,230,118,0.12)' }
-            : { ...styleInactivo, borderRadius: '10px 0 0 10px', border: 'none' }
-          }
+          style={() => ({
+            display: 'flex', alignItems: 'center', gap: '10px',
+            flex: 1, padding: '8px 12px',
+            color: estaActivo ? tema.accent : tema.textSecondary,
+            fontSize: '13px', fontWeight: estaActivo ? 600 : 500,
+            textDecoration: 'none', background: 'transparent',
+          })}
         >
           <span style={{ width: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             {grupo.icon}
@@ -100,42 +84,39 @@ function NavGrupo({ grupo, onCerrarMenu }) {
           {grupo.label}
         </NavLink>
         <button
-          onClick={() => setAbierto(v => !v)}
-          className="flex items-center justify-center shrink-0"
-          style={{
-            width: '32px', height: '34px',
-            background: abierto ? `${grupo.color}15` : 'transparent',
-            border: 'none',
-            color: abierto ? grupo.color : '#4a5f7a',
-            cursor: 'pointer',
-            borderRadius: '0 10px 10px 0',
-          }}
+          onClick={() => setAbierto(!abierto)}
+          className="flex items-center justify-center w-8 h-8 shrink-0"
+          style={{ background: 'transparent', border: 'none', color: estaActivo ? tema.accent : tema.textMuted, cursor: 'pointer' }}
         >
-          <ChevronDown
-            size={13}
-            style={{ transition: 'transform 0.2s', transform: abierto ? 'rotate(180deg)' : 'rotate(0deg)' }}
-          />
+          {abierto ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
         </button>
       </div>
 
-      {/* Sublinks */}
       {abierto && (
-        <div className="ml-4 mt-0.5 space-y-0.5 pl-3"
-          style={{ borderLeft: `1px solid ${grupo.color}30` }}
-        >
-          {grupo.hijos.map(hijo => (
+        <div className="mt-1 ml-4 space-y-0.5" style={{ borderLeft: `1px solid ${tema.bgCardBorde}`, paddingLeft: '12px' }}>
+          {grupo.hijos.map((hijo) => (
             <NavLink
               key={hijo.to}
               to={hijo.to}
               onClick={onCerrarMenu}
-              style={({ isActive }) => isActive
-                ? { ...styleActivo, padding: '6px 10px', fontSize: '12px' }
-                : { ...styleInactivo, padding: '6px 10px', fontSize: '12px', color: '#6a8099' }
+              style={({ isActive }) =>
+                isActive
+                  ? {
+                      display: 'flex', alignItems: 'center', gap: '8px',
+                      padding: '6px 10px', borderRadius: '8px',
+                      background: tema.accentDim, color: tema.accent,
+                      border: `1px solid ${tema.accentBorde}`,
+                      fontSize: '12px', fontWeight: 600, textDecoration: 'none',
+                    }
+                  : {
+                      display: 'flex', alignItems: 'center', gap: '8px',
+                      padding: '6px 10px', borderRadius: '8px',
+                      color: tema.textMuted, border: '1px solid transparent',
+                      fontSize: '12px', fontWeight: 500, textDecoration: 'none',
+                    }
               }
             >
-              <span style={{ width: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: grupo.color }}>
-                {hijo.icon}
-              </span>
+              {hijo.icon}
               {hijo.label}
             </NavLink>
           ))}
@@ -145,19 +126,142 @@ function NavGrupo({ grupo, onCerrarMenu }) {
   )
 }
 
-export default function Sidebar({ onCerrarMenu }) {
+function ModalBloqueado({ onClose, tema }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(5,8,16,0.85)', backdropFilter: 'blur(4px)' }}
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-sm rounded-2xl overflow-hidden"
+        style={{ background: 'rgba(13,21,40,0.98)', border: '1.5px solid rgba(255,179,0,0.3)', boxShadow: '0 0 60px rgba(255,179,0,0.08)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="px-8 py-7 text-center space-y-4">
+          <div
+            className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto"
+            style={{ background: 'rgba(255,179,0,0.1)', border: '1.5px solid rgba(255,179,0,0.3)' }}
+          >
+            <Lock size={28} style={{ color: '#ffb300' }} />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold mb-2" style={{ color: tema.textPrimary }}>
+              Funcionalidad en desarrollo
+            </h3>
+            <p className="text-sm leading-relaxed" style={{ color: tema.textSecondary }}>
+              Esta funcionalidad aún se encuentra en desarrollo.
+              Se le notificará cuando esté disponible para pruebas.
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="w-full py-2.5 rounded-xl text-sm font-bold"
+            style={{ background: 'rgba(0,230,118,0.1)', border: '1px solid rgba(0,230,118,0.3)', color: '#00e676', cursor: 'pointer' }}
+          >
+            Entendido
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const SECCIONES_ERROR = [
+  'Panel de hoy', 'Reproductores', 'Emparejamientos', 'Stock',
+  'Entregas', 'Sacrificios', 'Rendimiento', 'Estadísticas',
+  'Temperatura', 'Reportes', 'Otra sección',
+]
+
+function ReportarError() {
+  const { tema } = useTheme()
+  const [abierto, setAbierto]  = useState(false)
+  const [seccion, setSeccion]  = useState('')
+  const [descripcion, setDesc] = useState('')
+  const [enviado, setEnviado]  = useState(false)
+
+  function enviar() {
+    if (!descripcion.trim()) return
+    const asunto = encodeURIComponent(`[BioteríoDemo] Error en: ${seccion || 'sin especificar'}`)
+    const cuerpo = encodeURIComponent(
+      `Sección: ${seccion || 'sin especificar'}\n\nDescripción:\n${descripcion.trim()}\n\n---\nEnviado desde BioteríoDemo`
+    )
+    window.location.href = `mailto:LucasDeRiviaDev@gmail.com?subject=${asunto}&body=${cuerpo}`
+    setEnviado(true)
+    setTimeout(() => { setEnviado(false); setSeccion(''); setDesc(''); setAbierto(false) }, 2000)
+  }
+
+  return (
+    <div className="mx-3 mb-3 rounded-xl overflow-hidden"
+      style={{ border: '1px solid rgba(255,61,87,0.25)', background: 'rgba(255,61,87,0.04)' }}>
+      <button
+        onClick={() => setAbierto(!abierto)}
+        className="w-full px-4 py-3 flex items-center justify-between gap-2"
+        style={{ background: 'rgba(255,61,87,0.08)', borderBottom: abierto ? '1px solid rgba(255,61,87,0.2)' : 'none', cursor: 'pointer' }}
+      >
+        <div className="flex items-center gap-2">
+          <Bug size={14} style={{ color: '#ff6b80' }} />
+          <span className="text-xs font-semibold" style={{ color: '#ff6b80' }}>Reportar error</span>
+        </div>
+        <span style={{ color: '#ff6b80' }}>{abierto ? <ChevronUp size={14} /> : <ChevronDown size={14} />}</span>
+      </button>
+      {abierto && (
+        <div className="px-4 py-3 space-y-3">
+          <div>
+            <label className="text-xs font-semibold block mb-1" style={{ color: tema.textMuted }}>¿Dónde ocurrió?</label>
+            <select value={seccion} onChange={(e) => setSeccion(e.target.value)}
+              className="w-full px-2 py-1.5 rounded-lg text-xs focus:outline-none"
+              style={{ background: tema.bgInput, border: '1px solid rgba(255,61,87,0.25)', color: tema.textPrimary }}>
+              <option value="">— Seleccioná una sección —</option>
+              {SECCIONES_ERROR.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-semibold block mb-1" style={{ color: tema.textMuted }}>Describí el error</label>
+            <textarea value={descripcion} onChange={(e) => setDesc(e.target.value)}
+              placeholder="¿Qué pasó? ¿Qué esperabas que pasara?"
+              rows={3}
+              className="w-full px-2 py-1.5 rounded-lg text-xs resize-none focus:outline-none"
+              style={{ background: tema.bgInput, border: '1px solid rgba(255,61,87,0.25)', color: tema.textPrimary }}
+            />
+          </div>
+          <button onClick={enviar} disabled={!descripcion.trim() || enviado}
+            className="w-full py-2 rounded-lg text-xs font-bold transition-all"
+            style={{
+              background: enviado ? 'rgba(0,230,118,0.15)' : 'rgba(255,61,87,0.15)',
+              border: `1px solid ${enviado ? 'rgba(0,230,118,0.4)' : 'rgba(255,61,87,0.4)'}`,
+              color: enviado ? tema.accent : '#ff6b80',
+              cursor: !descripcion.trim() || enviado ? 'not-allowed' : 'pointer',
+              opacity: !descripcion.trim() ? 0.5 : 1,
+            }}>
+            {enviado ? '✓ Abriendo...' : <><Send size={12} style={{ display: 'inline', marginRight: 4 }} /> Enviar reporte</>}
+          </button>
+          <p className="text-xs text-center" style={{ color: 'rgba(74,95,122,0.6)' }}>
+            Se abre tu app de correo con el reporte listo para enviar.
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default function Sidebar({ onCerrarSesion, onCerrarMenu }) {
   const { animales, camadas, bio } = useBioterio()
-  const { especie, limpiarEspecie } = useEspecie()
+  const { config, limpiarBioterio } = useBioterioActivo()
+  const { tema, modoBrillo } = useTheme()
+  const { sesion } = useAuth()
+  const emailUsuario = sesion?.user?.email ?? ''
 
   const [fichaVisible, setFichaVisible] = useState(() => {
-    try { return localStorage.getItem('demo_ficha_visible') === 'true' }
-    catch { return true }
+    try { return localStorage.getItem('appMosca_ficha_visible') === 'true' }
+    catch { return false }
   })
+  const [modalBloqueado, setModalBloqueado] = useState(false)
 
   function toggleFicha() {
     setFichaVisible(v => {
       const nuevo = !v
-      localStorage.setItem('demo_ficha_visible', String(nuevo))
+      localStorage.setItem('appMosca_ficha_visible', String(nuevo))
       return nuevo
     })
   }
@@ -167,206 +271,166 @@ export default function Sidebar({ onCerrarMenu }) {
     { label: 'Destete',           valor: `${bio.DESTETE_DIAS} días post-nacimiento` },
     { label: 'Madurez sexual',    valor: `${Math.round(bio.MADUREZ_DIAS / 7)} semanas` },
     { label: 'Ciclo estral',      valor: `~${bio.CICLO_ESTRAL_DIAS} días` },
-    { label: 'Camada promedio',   valor: especie?.camadaPromedio ?? '—' },
-    { label: 'Vida reproductiva', valor: especie?.vidaReproductiva ?? '—' },
+    { label: 'Camada promedio',   valor: config?.camadaPromedio ?? '—' },
+    { label: 'Vida reproductiva', valor: config?.vidaReproductiva ?? '—' },
   ] : []
 
   const hembrasActivas = animales.filter((a) => a.sexo === 'hembra' && (a.estado === 'activo' || a.estado === 'en_apareamiento' || a.estado === 'en_cria')).length
   const machosActivos  = animales.filter((a) => a.sexo === 'macho'  && (a.estado === 'activo' || a.estado === 'en_apareamiento' || a.estado === 'en_cria')).length
   const prenadas       = camadas.filter((c) => c.fecha_copula && !c.fecha_nacimiento && !c.failure_flag).length
 
-  const especieColor = especie?.color ?? '#00e676'
-
   return (
-    <aside
-      className="w-64 h-full flex flex-col shrink-0"
-      style={{
-        background: 'linear-gradient(180deg, #080d1a 0%, #050810 100%)',
-        borderRight: '1px solid rgba(0,230,118,0.12)',
-      }}
-    >
-      {/* Logo + especie activa */}
-      <div className="px-4 py-4" style={{ borderBottom: '1px solid rgba(0,230,118,0.1)' }}>
+    <aside className="w-64 h-full flex flex-col shrink-0"
+      style={{ background: tema.bgSidebar, borderRight: `1px solid ${tema.bgSidebarBorde}` }}>
+
+      {modalBloqueado && <ModalBloqueado tema={tema} onClose={() => setModalBloqueado(false)} />}
+
+      {/* Logo + bioterio activo */}
+      <div className="px-4 py-4" style={{ borderBottom: `1px solid ${tema.bgSidebarBorde}` }}>
         <div className="flex items-center gap-3 mb-3">
-          <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
-            style={{
-              background: 'rgba(0,230,118,0.1)',
-              border: '1px solid rgba(0,230,118,0.3)',
-              boxShadow: '0 0 12px rgba(0,230,118,0.15)',
-            }}
-          >
-            <Dna size={18} style={{ color: '#00e676' }} />
+          <div style={modoBrillo ? { display: 'inline-flex', flexShrink: 0 } : {
+            background: tema.bgCard, borderRadius: '10px',
+            border: `1.5px solid ${tema.greenBorde}`,
+            boxShadow: '0 0 40px rgba(0,230,118,0.12), 0 4px 20px rgba(0,0,0,0.2)',
+            padding: '5px 8px', display: 'inline-flex', flexShrink: 0,
+          }}>
+            <img src={modoBrillo ? iterateNavLogoLight : iterateNavLogo} alt="ITeRatE"
+              style={{ height: '48px', width: 'auto', display: 'block',
+                filter: modoBrillo ? 'none' : 'contrast(2) brightness(1.1)',
+                mixBlendMode: modoBrillo ? 'multiply' : 'screen' }}
+            />
           </div>
           <div>
-            <div className="font-bold text-white text-sm tracking-wide">BIOTERIO</div>
-            <div className="text-xs font-mono" style={{ color: 'rgba(0,230,118,0.6)' }}>Demo · LOCAL</div>
+            <div className="font-bold text-sm tracking-wide" style={{ color: tema.textPrimary }}>BIOTERIO</div>
+            <div className="text-xs font-mono" style={{ color: tema.green, opacity: 0.8 }}>v2.0</div>
+            <div className="flex items-center gap-1 text-xs font-mono" style={{ color: '#f59e0b', opacity: 0.9 }}>
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#f59e0b', display: 'inline-block' }} />
+              DEMO
+            </div>
           </div>
         </div>
 
-        {/* Especie activa + botón cambiar */}
-        <div
-          className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl"
-          style={{ background: `${especieColor}10`, border: `1px solid ${especieColor}30` }}
-        >
+        <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl"
+          style={{ background: `${config?.color ?? '#00e676'}10`, border: `1px solid ${config?.color ?? '#00e676'}30` }}>
           <div className="flex items-center gap-2 min-w-0">
-            <span className="text-base shrink-0">{especie?.icono ?? '🔬'}</span>
+            <span className="text-base shrink-0">{config?.icon ?? '🐀'}</span>
             <div className="min-w-0">
-              <div className="text-xs font-semibold truncate" style={{ color: especieColor }}>
-                {especie?.nombre ?? 'Sin especie'}
+              <div className="text-xs font-semibold truncate" style={{ color: modoBrillo ? tema.textPrimary : (config?.color ?? tema.accent) }}>
+                {config?.labelCorto ?? 'Ratas'}
               </div>
               <div className="text-xs font-mono italic truncate" style={{ color: 'rgba(138,155,176,0.5)', fontSize: '10px' }}>
-                {especie?.nombreCientifico || '—'}
+                {config?.nombreCientifico ?? '—'}
               </div>
             </div>
           </div>
-          <button
-            onClick={limpiarEspecie}
-            title="Cambiar especie"
-            className="shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-all"
-            style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#4a5f7a', cursor: 'pointer' }}
-          >
-            <RefreshCw size={12} />
+          <button onClick={limpiarBioterio}
+            className="shrink-0 px-2 py-1 rounded-lg text-xs font-semibold transition-all"
+            style={{ background: tema.greenDim, border: `1px solid ${tema.greenBorde}`, color: tema.textMuted, cursor: 'pointer' }}>
+            Cambiar
           </button>
         </div>
       </div>
 
       {/* Stats rápidas */}
-      <div className="px-4 py-3 grid grid-cols-3 gap-2" style={{ borderBottom: '1px solid rgba(30,51,82,0.6)' }}>
+      <div className="px-4 py-3 grid grid-cols-3 gap-1" style={{ borderBottom: `1px solid ${tema.bgCardBorde}` }}>
         {[
-          { val: hembrasActivas, label: '♀', color: '#ce93d8' },
-          { val: machosActivos,  label: '♂', color: '#40c4ff' },
-          { val: prenadas,       label: '🫄', color: '#ffb300' },
+          { val: hembrasActivas, label: '♀', color: tema.purple },
+          { val: machosActivos,  label: '♂', color: tema.blue },
+          { val: prenadas,       label: '🫄', color: tema.amber },
         ].map(({ val, label, color }) => (
-          <div
-            key={label}
-            className="rounded-lg py-2 text-center"
-            style={{ background: 'rgba(30,51,82,0.3)', border: '1px solid rgba(30,51,82,0.6)' }}
-          >
+          <div key={label} className="rounded-lg py-2 text-center"
+            style={{ background: tema.bgCard, border: `1px solid ${tema.bgCardBorde}` }}>
             <div className="font-mono font-bold text-base" style={{ color }}>{val}</div>
-            <div className="text-xs mt-0.5" style={{ color: '#4a5f7a' }}>{label}</div>
+            <div className="text-xs mt-0.5" style={{ color: tema.textMuted }}>{label}</div>
           </div>
         ))}
       </div>
 
-      {/* Módulos */}
       <div className="px-4 pt-4 pb-1">
-        <div className="text-xs font-semibold tracking-widest uppercase" style={{ color: 'rgba(138,155,176,0.4)' }}>
-          Módulos
-        </div>
+        <div className="text-xs font-semibold tracking-widest uppercase" style={{ color: tema.textMuted, opacity: 0.6 }}>Módulos</div>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-3 pb-3 space-y-0.5">
-        {/* Links simples (Panel de hoy) */}
-        {NAV_LINKS.map(({ to, label, icon }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={to === '/'}
-            onClick={onCerrarMenu}
-            style={({ isActive }) => isActive ? styleActivo : styleInactivo}
-          >
-            <span style={{ width: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{icon}</span>
-            {label}
-          </NavLink>
-        ))}
+      <nav className="flex-1 overflow-y-auto px-3 pb-3 space-y-1">
+        {[LINK_INICIO, null, LINK_DASHBOARD].map((item, i) =>
+          item === null
+            ? <div key="sep-top" style={{ height: '1px', background: tema.bgCardBorde, margin: '6px 4px' }} />
+            : (
+              <NavLink key={item.to} to={item.to} end={item.to === '/'} onClick={onCerrarMenu}
+                style={({ isActive }) => isActive
+                  ? { display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', borderRadius: '10px', background: tema.greenDim, color: '#00e676', border: '1px solid rgba(0,230,118,0.25)', boxShadow: '0 0 12px rgba(0,230,118,0.1)', fontSize: '13px', fontWeight: 600, textDecoration: 'none' }
+                  : { display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', borderRadius: '10px', color: tema.textSecondary, border: '1px solid transparent', fontSize: '13px', fontWeight: 500, textDecoration: 'none' }
+                }>
+                <span style={{ width: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{item.icon}</span>
+                {item.label}
+              </NavLink>
+            )
+        )}
 
-        {/* Separador */}
-        <div style={{ height: '1px', background: 'rgba(30,51,82,0.6)', margin: '6px 4px' }} />
+        <div style={{ height: '1px', background: tema.bgCardBorde, margin: '6px 4px' }} />
 
-        {/* Grupos con submenús */}
-        {NAV_GRUPOS.map(grupo => (
+        {GRUPOS.map((grupo) => (
           <NavGrupo key={grupo.to} grupo={grupo} onCerrarMenu={onCerrarMenu} />
         ))}
 
-        {/* Separador */}
-        <div style={{ height: '1px', background: 'rgba(30,51,82,0.6)', margin: '6px 4px' }} />
+        <div style={{ height: '1px', background: tema.bgCardBorde, margin: '6px 4px' }} />
 
-        {/* Consumo alimento y viruta */}
-        {NAV_LINKS_CONSUMO.map(({ to, label, icon }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end
-            onClick={onCerrarMenu}
-            style={({ isActive }) => isActive ? styleActivo : styleInactivo}
+        {/* Secciones bloqueadas */}
+        {BLOQUEADAS.map(({ label, icon }) => (
+          <button
+            key={label}
+            onClick={() => { setModalBloqueado(true); onCerrarMenu?.() }}
+            className="w-full flex items-center gap-[10px] px-3 py-2 rounded-[10px] transition-all"
+            style={{ background: 'transparent', border: '1px solid transparent', color: tema.textMuted, fontSize: '13px', fontWeight: 500, cursor: 'pointer', textAlign: 'left', opacity: 0.65 }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,179,0,0.04)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
           >
             <span style={{ width: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{icon}</span>
-            {label}
-          </NavLink>
+            <span className="flex-1">{label}</span>
+            <Lock size={12} style={{ color: '#ffb300', flexShrink: 0 }} />
+          </button>
         ))}
 
-        {/* Separador */}
-        <div style={{ height: '1px', background: 'rgba(30,51,82,0.6)', margin: '6px 4px' }} />
+        <div style={{ height: '1px', background: tema.bgCardBorde, margin: '6px 4px' }} />
 
-        {/* Reportes y Tutorial */}
-        {NAV_LINKS_FINAL.map(({ to, label, icon }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end
-            onClick={onCerrarMenu}
-            style={({ isActive }) => isActive ? styleActivo : styleInactivo}
-          >
-            <span style={{ width: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{icon}</span>
-            {label}
-          </NavLink>
-        ))}
+        <NavLink to={LINK_REPORTES.to} onClick={onCerrarMenu}
+          style={({ isActive }) => isActive
+            ? { display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', borderRadius: '10px', background: tema.greenDim, color: tema.accent, border: `1px solid ${tema.accentBorde}`, boxShadow: modoBrillo ? 'none' : '0 0 12px rgba(0,230,118,0.1)', fontSize: '13px', fontWeight: 600, textDecoration: 'none' }
+            : { display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', borderRadius: '10px', color: tema.textSecondary, border: '1px solid transparent', fontSize: '13px', fontWeight: 500, textDecoration: 'none' }
+          }>
+          <span style={{ width: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{LINK_REPORTES.icon}</span>
+          {LINK_REPORTES.label}
+        </NavLink>
       </nav>
 
       {/* Ficha biológica */}
-      {especie && bio && (
+      {config && bio && (
         <div className="mx-3 mb-3 rounded-xl overflow-hidden"
-          style={{ border: '1px solid rgba(161,120,80,0.3)', background: 'rgba(161,120,80,0.05)' }}
-        >
-          {/* Header siempre visible con botón toggle */}
-          <button
-            onClick={toggleFicha}
+          style={{ border: '1px solid rgba(161,120,80,0.3)', background: 'rgba(161,120,80,0.05)' }}>
+          <button onClick={toggleFicha}
             className="w-full px-4 py-3 flex items-center gap-2 text-left"
-            style={{
-              background: 'rgba(161,120,80,0.1)',
-              borderBottom: fichaVisible ? '1px solid rgba(161,120,80,0.2)' : 'none',
-              cursor: 'pointer',
-              border: 'none',
-            }}
-          >
-            <span className="text-xl">{especie.icono}</span>
+            style={{ background: 'rgba(161,120,80,0.1)', borderBottom: fichaVisible ? '1px solid rgba(161,120,80,0.2)' : 'none', cursor: 'pointer', border: 'none' }}>
+            <span className="text-xl">{config.icon}</span>
             <div className="flex-1 min-w-0">
-              <div className="font-bold text-sm" style={{ color: '#c9a87a' }}>{especie.nombre}</div>
-              <div className="text-xs font-mono italic opacity-60 truncate" style={{ color: '#a17850' }}>{especie.nombreCientifico || '—'}</div>
+              <div className="font-bold text-sm" style={{ color: tema.textPrimary }}>{config.label}</div>
+              <div className="text-xs font-mono italic opacity-60 truncate" style={{ color: tema.textSecondary }}>{config.nombreCientifico}</div>
             </div>
-            <ChevronDown
-              size={13}
-              style={{
-                color: '#a17850',
-                flexShrink: 0,
-                transition: 'transform 0.2s',
-                transform: fichaVisible ? 'rotate(180deg)' : 'rotate(0deg)',
-              }}
-            />
+            <ChevronDown size={13} style={{ color: tema.textMuted, flexShrink: 0, transition: 'transform 0.2s', transform: fichaVisible ? 'rotate(180deg)' : 'rotate(0deg)' }} />
           </button>
-
-          {/* Contenido colapsable */}
           {fichaVisible && (
             <>
               <div className="px-4 py-3 space-y-2">
-                <div className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: 'rgba(161,120,80,0.5)' }}>
-                  Referencias biológicas
-                </div>
+                <div className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: tema.textMuted }}>Referencias biológicas</div>
                 {datosBio.map(({ label, valor }) => (
                   <div key={label} className="flex items-start justify-between gap-2">
-                    <span className="text-xs leading-tight" style={{ color: '#6b7c94' }}>{label}</span>
-                    <span className="text-xs font-mono font-semibold text-right" style={{ color: '#a17850' }}>{valor}</span>
+                    <span className="text-xs leading-tight" style={{ color: tema.textMuted }}>{label}</span>
+                    <span className="text-xs font-mono font-semibold text-right" style={{ color: tema.textSecondary }}>{valor}</span>
                   </div>
                 ))}
               </div>
-
-              {especie.orden && especie.orden !== '—' && (
-                <div
-                  className="px-4 py-2 text-xs text-center font-mono"
-                  style={{ borderTop: '1px solid rgba(161,120,80,0.15)', color: 'rgba(107,124,148,0.5)' }}
-                >
-                  {especie.orden}
+              {config.orden && config.orden !== '—' && (
+                <div className="px-4 py-2 text-xs text-center font-mono"
+                  style={{ borderTop: `1px solid ${tema.bgCardBorde}`, color: tema.textMuted }}>
+                  {config.orden}
                 </div>
               )}
             </>
@@ -374,27 +438,22 @@ export default function Sidebar({ onCerrarMenu }) {
         </div>
       )}
 
-      {/* Footer — Logo GenERats */}
-      <div
-        style={{
-          borderTop: '1px solid rgba(0,230,118,0.08)',
-          padding: '14px 12px 18px',
-          display: 'flex',
-          justifyContent: 'center',
-        }}
-      >
-        <GenERatsBrand
-          iconSize={52}
-          nameSize={30}
-          sloganSize={11}
-          sublineSize={0}
-          gap={10}
-          align="left"
-          showSubline={false}
-          allowWrap
-          iconPrefix="sidebarFooterBrandPro"
-          style={{ width: '100%', maxWidth: '100%' }}
-        />
+      <ReportarError />
+
+      {/* Usuario + cerrar sesión */}
+      <div className="mx-3 mb-3 rounded-xl px-4 py-3"
+        style={{ background: tema.bgCard, border: `1px solid ${tema.bgCardBorde}` }}>
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <div className="text-xs font-semibold uppercase tracking-widest mb-0.5" style={{ color: tema.textMuted }}>Usuario</div>
+            <div className="text-xs font-mono truncate" style={{ color: tema.textSecondary }}>{emailUsuario}</div>
+          </div>
+          <button onClick={onCerrarSesion} title="Cerrar sesión"
+            className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-all"
+            style={{ background: 'rgba(255,61,87,0.08)', border: '1px solid rgba(255,61,87,0.2)', color: '#ff6b80', cursor: 'pointer' }}>
+            <LogOut size={14} />
+          </button>
+        </div>
       </div>
     </aside>
   )

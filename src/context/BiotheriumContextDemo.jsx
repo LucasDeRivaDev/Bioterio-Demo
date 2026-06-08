@@ -1,14 +1,9 @@
-/**
- * BiotheriumContextPro.jsx — BioteríoDemo
- *
- * Misma lógica que BiotheriumContextDemo.jsx pero usa useEspecie()
- * en lugar de useBioterioActivo(). Sin Supabase — todo en localStorage.
- *
- * Contrato idéntico al contexto original: mismos estados y funciones.
- */
+// Versión demo de BiotheriumContext — usa localStorage en vez de Supabase.
+// Contrato idéntico al original: mismos estados y funciones exportadas.
 import { createContext, useContext, useReducer } from 'react'
 import { generarId } from '../utils/storage'
-import { useEspecie } from './EspecieContext'
+import { useBioterioActivo } from './BioterioActivoContext'
+import { getSeedInicial } from '../data/seedDemo'
 
 // ─── Keys de localStorage ─────────────────────────────────────────────────────
 const LS = {
@@ -33,7 +28,13 @@ function guardar(key, valor) {
   localStorage.setItem(key, JSON.stringify(valor))
 }
 
+// Si no hay datos en localStorage carga el seed
 function inicializar() {
+  const yaHayDatos = localStorage.getItem(LS.animales) !== null
+  if (!yaHayDatos) {
+    const seed = getSeedInicial()
+    Object.entries(LS).forEach(([k, lsKey]) => guardar(lsKey, seed[k]))
+  }
   return {
     animales:     leer(LS.animales,     []),
     camadas:      leer(LS.camadas,      []),
@@ -46,9 +47,9 @@ function inicializar() {
   }
 }
 
-// ─── Reducer ──────────────────────────────────────────────────────────────────
+// ─── Reducer (idéntico al original) ──────────────────────────────────────────
 function reducer(estado, accion) {
-  let lista
+  let lista, nuevo
   switch (accion.type) {
     case 'SET_ANIMALES':         return { ...estado, animales:     accion.payload }
     case 'SET_CAMADAS':          return { ...estado, camadas:      accion.payload }
@@ -117,16 +118,41 @@ function reducer(estado, accion) {
   }
 }
 
+// ─── Función para persistir el estado después de cada acción ─────────────────
+function persistir(key, valor) {
+  guardar(LS[key], valor)
+}
+
 const BiotheriumCtx = createContext(null)
 
-export function BiotheriumProProvider({ children }) {
-  const { especie, bio } = useEspecie()
-  const especieId = especie?.id ?? 'personalizada'
+export function BiotheriumDemoProvider({ children, onReset }) {
+  const { bioterioActivo, bio } = useBioterioActivo()
   const [estado, dispatch] = useReducer(reducer, undefined, inicializar)
+
+  // Helper: dispatch + persist
+  function dp(type, payload, persistKey, nuevoValor) {
+    dispatch({ type, payload })
+    if (persistKey && nuevoValor !== undefined) persistir(persistKey, nuevoValor)
+  }
+
+  // ── RESET DEMO ─────────────────────────────────────────────────────────────
+  function resetearDemo() {
+    const seed = getSeedInicial()
+    Object.entries(LS).forEach(([k, lsKey]) => guardar(lsKey, seed[k]))
+    dispatch({ type: 'SET_ANIMALES',     payload: seed.animales })
+    dispatch({ type: 'SET_CAMADAS',      payload: seed.camadas })
+    dispatch({ type: 'SET_JAULAS',       payload: seed.jaulas })
+    dispatch({ type: 'SET_SACRIFICIOS',  payload: seed.sacrificios })
+    dispatch({ type: 'SET_ENTREGAS',     payload: seed.entregas })
+    dispatch({ type: 'SET_TEMPERATURAS', payload: seed.temperaturas })
+    dispatch({ type: 'SET_INCIDENTES',   payload: seed.incidentes })
+    dispatch({ type: 'SET_EXTENDIDOS',   payload: seed.extendidos })
+    if (onReset) onReset()
+  }
 
   // ── ANIMALES ───────────────────────────────────────────────────────────────
   async function agregarAnimal(datos) {
-    const nuevo = { ...datos, id: generarId(), especie_id: especieId }
+    const nuevo = { ...datos, id: generarId(), bioterio_id: bioterioActivo }
     const siguientes = [...estado.animales, nuevo].sort((a, b) => (a.fecha_nacimiento ?? '').localeCompare(b.fecha_nacimiento ?? ''))
     dispatch({ type: 'SET_ANIMALES', payload: siguientes })
     guardar(LS.animales, siguientes)
@@ -146,7 +172,7 @@ export function BiotheriumProProvider({ children }) {
 
   // ── JAULAS ─────────────────────────────────────────────────────────────────
   async function agregarJaula(datos) {
-    const nueva = { ...datos, id: generarId(), especie_id: especieId }
+    const nueva = { ...datos, id: generarId(), bioterio_id: bioterioActivo }
     const siguientes = [...estado.jaulas, nueva]
     dispatch({ type: 'SET_JAULAS', payload: siguientes })
     guardar(LS.jaulas, siguientes)
@@ -166,17 +192,15 @@ export function BiotheriumProProvider({ children }) {
 
   // ── CAMADAS ────────────────────────────────────────────────────────────────
   async function agregarCamada(datos) {
-    const nueva = { ...datos, id: generarId(), especie_id: especieId }
-    const siguientes = [...estado.camadas, nueva].sort((a, b) => (a.fecha_copula ?? '').localeCompare(b.fecha_copula ?? ''))
+    const nueva = { ...datos, id: generarId(), bioterio_id: bioterioActivo }
+    let siguientes = [...estado.camadas, nueva].sort((a, b) => (a.fecha_copula ?? '').localeCompare(b.fecha_copula ?? ''))
     dispatch({ type: 'SET_CAMADAS', payload: siguientes })
     guardar(LS.camadas, siguientes)
+    // Auto-setear hembra a en_apareamiento
     if (datos.id_madre) {
       const madre = estado.animales.find((a) => a.id === datos.id_madre)
-      if (madre) {
-        const nuevoEstado = datos.fecha_nacimiento ? 'en_cria' : 'en_apareamiento'
-        if (madre.estado === 'activo' || (datos.fecha_nacimiento && madre.estado === 'en_apareamiento')) {
-          await editarAnimal({ ...madre, estado: nuevoEstado })
-        }
+      if (madre && madre.estado === 'activo') {
+        await editarAnimal({ ...madre, estado: 'en_apareamiento' })
       }
     }
   }
@@ -227,7 +251,7 @@ export function BiotheriumProProvider({ children }) {
 
   // ── SACRIFICIOS ────────────────────────────────────────────────────────────
   async function registrarSacrificio(datos) {
-    const nuevo = { ...datos, id: generarId(), especie_id: especieId }
+    const nuevo = { ...datos, id: generarId(), bioterio_id: bioterioActivo }
     const siguientes = [...estado.sacrificios, nuevo].sort((a, b) => (a.fecha ?? '').localeCompare(b.fecha ?? ''))
     dispatch({ type: 'SET_SACRIFICIOS', payload: siguientes })
     guardar(LS.sacrificios, siguientes)
@@ -236,7 +260,7 @@ export function BiotheriumProProvider({ children }) {
   async function sacrificarReproductor(animal, fecha, motivo) {
     const actualizado = { ...animal, estado: 'fallecido', fecha_sacrificio: fecha, motivo_sacrificio: motivo || null }
     await editarAnimal(actualizado)
-    const sacrificioRepro = { id: generarId(), camada_id: null, animal_id: animal.id, cantidad: 1, fecha, categoria: 'reproductor', notas: motivo || null, especie_id: especieId }
+    const sacrificioRepro = { id: generarId(), camada_id: null, animal_id: animal.id, cantidad: 1, fecha, categoria: 'reproductor', notas: motivo || null, bioterio_id: bioterioActivo }
     const siguientes = [...estado.sacrificios, sacrificioRepro].sort((a, b) => (a.fecha ?? '').localeCompare(b.fecha ?? ''))
     dispatch({ type: 'SET_SACRIFICIOS', payload: siguientes })
     guardar(LS.sacrificios, siguientes)
@@ -268,7 +292,7 @@ export function BiotheriumProProvider({ children }) {
 
   // ── ENTREGAS ───────────────────────────────────────────────────────────────
   async function registrarEntrega(datos) {
-    const nuevo = { ...datos, id: generarId(), especie_id: especieId }
+    const nuevo = { ...datos, id: generarId(), bioterio_id: bioterioActivo }
     const siguientes = [...estado.entregas, nuevo].sort((a, b) => (a.fecha ?? '').localeCompare(b.fecha ?? ''))
     dispatch({ type: 'SET_ENTREGAS', payload: siguientes })
     guardar(LS.entregas, siguientes)
@@ -276,7 +300,7 @@ export function BiotheriumProProvider({ children }) {
 
   async function entregarReproductor(animal, fecha, observaciones) {
     await editarAnimal({ ...animal, estado: 'retirado' })
-    const entrega = { id: generarId(), camada_id: null, animal_id: animal.id, cantidad: 1, fecha, observaciones: observaciones || null, especie_id: especieId }
+    const entrega = { id: generarId(), camada_id: null, animal_id: animal.id, cantidad: 1, fecha, observaciones: observaciones || null, bioterio_id: bioterioActivo }
     const siguientes = [...estado.entregas, entrega].sort((a, b) => (a.fecha ?? '').localeCompare(b.fecha ?? ''))
     dispatch({ type: 'SET_ENTREGAS', payload: siguientes })
     guardar(LS.entregas, siguientes)
@@ -298,7 +322,7 @@ export function BiotheriumProProvider({ children }) {
 
   // ── INCIDENTES ─────────────────────────────────────────────────────────────
   async function agregarIncidente(datos) {
-    const nuevo = { ...datos, id: generarId(), especie_id: especieId }
+    const nuevo = { ...datos, id: generarId(), bioterio_id: bioterioActivo }
     const siguientes = [...estado.incidentes, nuevo].sort((a, b) => b.fecha.localeCompare(a.fecha))
     dispatch({ type: 'SET_INCIDENTES', payload: siguientes })
     guardar(LS.incidentes, siguientes)
@@ -312,7 +336,7 @@ export function BiotheriumProProvider({ children }) {
 
   // ── TEMPERATURAS ──────────────────────────────────────────────────────────
   async function agregarTemperatura(datos) {
-    const nuevo = { ...datos, id: generarId(), especie_id: especieId }
+    const nuevo = { ...datos, id: generarId(), bioterio_id: bioterioActivo }
     const siguientes = [...estado.temperaturas, nuevo]
     dispatch({ type: 'SET_TEMPERATURAS', payload: siguientes })
     guardar(LS.temperaturas, siguientes)
@@ -328,7 +352,7 @@ export function BiotheriumProProvider({ children }) {
   async function agregarExtendido(datos) {
     const existente = estado.extendidos.find((e) => e.animal_id === datos.animal_id && e.fecha === datos.fecha)
     if (existente) return editarExtendido({ ...existente, ...datos })
-    const nuevo = { ...datos, id: generarId(), especie_id: especieId }
+    const nuevo = { ...datos, id: generarId(), bioterio_id: bioterioActivo }
     const lista = estado.extendidos.filter((e) => !(e.animal_id === nuevo.animal_id && e.fecha === nuevo.fecha))
     lista.push(nuevo)
     lista.sort((a, b) => a.fecha.localeCompare(b.fecha))
@@ -361,7 +385,8 @@ export function BiotheriumProProvider({ children }) {
       cargando: false,
       error: null,
       bio,
-      bioterioActivo: especieId,
+      bioterioActivo,
+      resetearDemo,
       agregarAnimal, editarAnimal, eliminarAnimal, sacrificarReproductor,
       agregarCamada, editarCamada, eliminarCamada, confirmarSeparacion,
       registrarSacrificio, eliminarSacrificio, eliminarSacrificioReproductor,
@@ -378,6 +403,6 @@ export function BiotheriumProProvider({ children }) {
 
 export function useBioterio() {
   const ctx = useContext(BiotheriumCtx)
-  if (!ctx) throw new Error('useBioterio debe usarse dentro de BiotheriumProProvider')
+  if (!ctx) throw new Error('useBioterio debe usarse dentro de BiotheriumDemoProvider')
   return ctx
 }
