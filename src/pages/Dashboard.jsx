@@ -354,7 +354,7 @@ export default function Dashboard() {
         if (edad < 40) return null
         const madre = animalesExportados.find((a) => a.id === c.id_madre)
         const padre = animalesExportados.find((a) => a.id === c.id_padre)
-        const progenitores = madre && padre ? `${madre.codigo} × ${padre.codigo}` : `camada ...${c.id.slice(-6)}`
+        const progenitores = madre && padre ? `${madre.codigo} × ${padre.codigo}` : c.fecha_nacimiento ? `CAMADA-${c.fecha_nacimiento}` : 'Camada sin progenitores'
         return {
           id: `f1-sacrificio-${c.id}`,
           tipo: 'sacrificio_f1',

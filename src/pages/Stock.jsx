@@ -489,7 +489,7 @@ function JaulaModal({ bloque, jaulas, camadas, animales, onCerrar, editarJaula, 
   const moverOk = destinoId && cantN > 0 && cantN <= bloque.total
 
   // ── Promover ──────────────────────────────────────────────────────
-  const sufijoCamada = bloque.camada?.id?.slice(-4).toUpperCase() ?? 'XXXX'
+  const sufijoCamada = (bloque.camada?.fecha_nacimiento ?? bloque.camada?.fecha_copula ?? '').replace(/-/g, '').slice(-4) || '0001'
   const [sexoPromover,      setSexoPromover]      = useState('hembra')
   const [codigoPromover,    setCodigoPromover]    = useState(`H-${sufijoCamada}`)
   const [guardandoPromover, setGuardandoPromover] = useState(false)
@@ -801,9 +801,18 @@ function JaulaModal({ bloque, jaulas, camadas, animales, onCerrar, editarJaula, 
               <select value={destinoId} onChange={(e) => setDestinoId(e.target.value)} style={{ ...iStyle }}>
                 {jaulasDestino.map((j) => {
                   const c = camadas.find((x) => x.id === j.camada_id)
+                  let etiqueta = '—'
+                  if (c) {
+                    const padre = animales?.find((a) => a.id === c.id_padre)
+                    const madre = animales?.find((a) => a.id === c.id_madre)
+                    if (padre && madre && c.fecha_nacimiento) etiqueta = `${padre.codigo}-${madre.codigo}-${c.fecha_nacimiento}`
+                    else if (padre && madre) etiqueta = `${padre.codigo} × ${madre.codigo}`
+                    else if (c.fecha_nacimiento) etiqueta = `CAMADA-${c.fecha_nacimiento}`
+                    else etiqueta = 'Camada'
+                  }
                   return (
                     <option key={j.id} value={j.id}>
-                      {c ? `Camada ...${c.id.slice(-4)}` : `Jaula ...${j.id.slice(-4)}`} — {j.total} animales
+                      {etiqueta} — {j.total} animales
                     </option>
                   )
                 })}
@@ -886,8 +895,16 @@ function JaulaModal({ bloque, jaulas, camadas, animales, onCerrar, editarJaula, 
                 </div>
               )}
               <div className="flex items-center justify-between text-xs">
-                <span style={{ color: tema.textMuted }}>Origen</span>
-                <span className="font-mono" style={{ color: tema.textSecondary }}>Camada ...{bloque.camada?.id?.slice(-6)}</span>
+                <span style={{ color: tema.textMuted }}>Camada</span>
+                <span className="font-mono" style={{ color: tema.textSecondary }}>
+                  {bloque.padre?.codigo && bloque.madre?.codigo && bloque.camada?.fecha_nacimiento
+                    ? `${bloque.padre.codigo}-${bloque.madre.codigo}-${bloque.camada.fecha_nacimiento}`
+                    : bloque.padre?.codigo && bloque.madre?.codigo
+                      ? `${bloque.padre.codigo}-${bloque.madre.codigo}`
+                      : bloque.camada?.fecha_nacimiento
+                        ? `CAMADA-${bloque.camada.fecha_nacimiento}`
+                        : '—'}
+                </span>
               </div>
             </div>
 
@@ -1609,7 +1626,7 @@ function ModalPromoverReproductor({ bloques, animales, onConfirmar, onCerrar }) 
   const [guardando, setGuardando] = useState(false)
   const [items, setItems] = useState(() =>
     bloques.map((b) => {
-      const sufijo = b.camada?.id?.slice(-4).toUpperCase() ?? 'XXXX'
+      const sufijo = (b.camada?.fecha_nacimiento ?? b.camada?.fecha_copula ?? '').replace(/-/g, '').slice(-4) || '0001'
       return { bloqueId: b.id, sexo: 'hembra', codigo: `H-${sufijo}` }
     })
   )
@@ -1622,7 +1639,7 @@ function ModalPromoverReproductor({ bloques, animales, onConfirmar, onCerrar }) 
       const updated = { ...item, [field]: value }
       if (field === 'sexo') {
         const b = bloques[i]
-        const sufijo       = b.camada?.id?.slice(-4).toUpperCase() ?? 'XXXX'
+        const sufijo       = (b.camada?.fecha_nacimiento ?? b.camada?.fecha_copula ?? '').replace(/-/g, '').slice(-4) || '0001'
         const prefijoViejo = item.sexo  === 'macho' ? 'M' : 'H'
         const prefijoNuevo = value === 'macho' ? 'M' : 'H'
         if (item.codigo === `${prefijoViejo}-${sufijo}`) updated.codigo = `${prefijoNuevo}-${sufijo}`
@@ -2157,7 +2174,7 @@ export default function Stock() {
       fecha_nacimiento: bloque.camada?.fecha_nacimiento ?? null,
       id_madre: bloque.camada?.id_madre ?? null,
       id_padre: bloque.camada?.id_padre ?? null,
-      notas: `Stock → reproductor · camada ...${bloque.camada?.id?.slice(-6) ?? ''}`,
+      notas: null,
     })
 
     if (bloque.jaula?.id) {
@@ -2186,7 +2203,7 @@ export default function Stock() {
         fecha_nacimiento: bloque.camada?.fecha_nacimiento ?? null,
         id_madre: bloque.camada?.id_madre ?? null,
         id_padre: bloque.camada?.id_padre ?? null,
-        notas: `Stock → reproductor · camada ...${bloque.camada?.id?.slice(-6) ?? ''}`,
+        notas: null,
       })
 
       if (bloque.jaula?.id) {

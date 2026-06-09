@@ -478,9 +478,9 @@ function DocImprimible({ tituloPeriodo, datos, animales, camadas, secciones, sec
                   <th>Jaula</th><th>Progenitores</th><th>Total</th><th>♂ Machos</th><th>♀ Hembras</th><th>Notas</th>
                 </tr></thead>
                 <tbody>
-                  {stockActual.map(j => (
+                  {stockActual.map((j, idx) => (
                     <tr key={j.id}>
-                      <td><strong>{j.id.slice(-6).toUpperCase()}</strong></td>
+                      <td><strong>J{idx + 1}</strong></td>
                       <td>{j.camada_id ? parejaStr(j.camada_id) : '—'}</td>
                       <td>{j.total ?? '—'}</td>
                       <td>{j.machos != null ? j.machos : '—'}</td>

@@ -600,7 +600,7 @@ return (
                       <span style={{ color: animal.notas && animal.nota_tipo === 'critica' ? '#ff6b80' : '#c9d4e0' }}>
                         {animal.codigo}
                       </span>
-                      {animal.notas && (
+                      {animal.notas && !animal.notas.startsWith('Stock →') && (
                         <span
                           title={animal.notas}
                           style={{ color: animal.nota_tipo === 'critica' ? '#ff1744' : '#ffb300', marginLeft: '5px', cursor: 'help' }}
@@ -721,7 +721,7 @@ return (
                     <tr style={{ borderBottom: '1px solid rgba(30,51,82,0.4)', background: tema.bgInput }}>
                       <td colSpan={8} className="px-6 py-4 space-y-4">
                         {/* Nota del animal */}
-                        {animal.notas && (
+                        {animal.notas && !animal.notas.startsWith('Stock →') && (
                           <div
                             className="rounded-xl px-4 py-3 flex items-start gap-3"
                             style={{
@@ -737,6 +737,27 @@ return (
                               </div>
                               <div className="text-sm leading-relaxed" style={{ color: tema.textPrimary }}>{animal.notas}</div>
                             </div>
+                          </div>
+                        )}
+                        {/* Camada de origen — solo en detalles expandibles */}
+                        {(animal.id_madre || animal.id_padre || animal.fecha_nacimiento) && (
+                          <div className="flex flex-wrap items-center gap-2">
+                            {animal.id_madre && animal.id_padre && animal.fecha_nacimiento ? (
+                              <span
+                                className="text-xs font-mono px-2.5 py-1 rounded-lg"
+                                style={{ background: 'rgba(64,196,255,0.07)', border: '1px solid rgba(64,196,255,0.18)', color: '#6a8099' }}
+                              >
+                                Camada: {nombreAnimal(animal.id_padre)}-{nombreAnimal(animal.id_madre)}-{animal.fecha_nacimiento}
+                              </span>
+                            ) : (animal.id_madre || animal.id_padre) && (
+                              <span
+                                className="text-xs font-mono px-2.5 py-1 rounded-lg"
+                                style={{ background: 'rgba(64,196,255,0.07)', border: '1px solid rgba(64,196,255,0.18)', color: '#6a8099' }}
+                              >
+                                Origen: {animal.id_padre ? nombreAnimal(animal.id_padre) : '?'} × {animal.id_madre ? nombreAnimal(animal.id_madre) : '?'}
+                                {animal.fecha_nacimiento && ` · ${formatFecha(animal.fecha_nacimiento)}`}
+                              </span>
+                            )}
                           </div>
                         )}
                         <div className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#ffd740' }}>
