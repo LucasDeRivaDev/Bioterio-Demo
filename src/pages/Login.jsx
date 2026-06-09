@@ -262,6 +262,7 @@ export default function Login() {
                 'Ingresar al sistema'
               )}
             </button>
+
           </form>
 
           {/* Footer */}
