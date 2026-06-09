@@ -1793,6 +1793,7 @@ function CategoriaCard({ icono, titulo, subtitulo, total, grupos, gruposLabel, m
 
 
 function ModalEliminarJaula({ bloque, onConfirmar, onCerrar }) {
+  const { tema } = useTheme()
   const [guardando, setGuardando] = useState(false)
   const cfg = CAT[bloque.categoria]
 
