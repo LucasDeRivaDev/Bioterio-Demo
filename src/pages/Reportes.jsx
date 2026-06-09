@@ -280,6 +280,7 @@ export default function Reportes() {
           animales={animales}
           camadas={camadas}
           secciones={secciones}
+          seccionesDef={SECCIONES}
           bioterioActivo={bioterioActivo}
         />
       </div>
@@ -291,7 +292,8 @@ export default function Reportes() {
 // Documento imprimible
 // ─────────────────────────────────────────────────────────────────────────────
 
-function DocImprimible({ tituloPeriodo, datos, animales, camadas, secciones, bioterioActivo }) {
+function DocImprimible({ tituloPeriodo, datos, animales, camadas, secciones, seccionesDef, bioterioActivo }) {
+  const SECCIONES = seccionesDef
   const ahora = new Date().toLocaleDateString('es-AR', {
     day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit',
   })

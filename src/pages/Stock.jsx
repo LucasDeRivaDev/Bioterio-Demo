@@ -1853,15 +1853,16 @@ function ModalEliminarJaula({ bloque, onConfirmar, onCerrar }) {
   )
 }
 
+const CAT = {
+  macho_repro:  { label: 'Macho reproductor',  color: '#40c4ff', bg: 'rgba(64,196,255,0.1)',   borde: 'rgba(64,196,255,0.3)',   icono: '🐀' },
+  hembra_repro: { label: 'Hembra reproductora', color: '#ce93d8', bg: 'rgba(206,147,216,0.1)',  borde: 'rgba(206,147,216,0.3)', icono: '🐀' },
+  crias:        { label: 'Crías',               color: '#00e676', bg: 'rgba(0,230,118,0.08)',   borde: 'rgba(0,230,118,0.25)',  icono: '🐣' },
+  jovenes:      { label: 'Jóvenes',             color: '#ffb300', bg: 'rgba(255,179,0,0.08)',   borde: 'rgba(255,179,0,0.25)',  icono: '🐭' },
+  adultos:      { label: 'Adultos',             color: '#ff3d57', bg: 'rgba(255,61,87,0.08)',   borde: 'rgba(255,61,87,0.25)', icono: '🐁' },
+}
+
 export default function Stock() {
   const { tema, modoBrillo } = useTheme()
-  const CAT = {
-    macho_repro:  { label: 'Macho reproductor',  color: tema.blue, bg: 'rgba(64,196,255,0.1)',   borde: 'rgba(64,196,255,0.3)',   icono: '🐀' },
-    hembra_repro: { label: 'Hembra reproductora', color: tema.purple, bg: 'rgba(206,147,216,0.1)',  borde: 'rgba(206,147,216,0.3)', icono: '🐀' },
-    crias:        { label: 'Crías',               color: tema.accent, bg: 'rgba(0,230,118,0.08)',   borde: 'rgba(0,230,118,0.25)',  icono: '🐣' },
-    jovenes:      { label: 'Jóvenes',             color: tema.amber, bg: 'rgba(255,179,0,0.08)',   borde: 'rgba(255,179,0,0.25)',  icono: '🐭' },
-    adultos:      { label: 'Adultos',             color: tema.red, bg: 'rgba(255,61,87,0.08)',   borde: 'rgba(255,61,87,0.25)', icono: '🐁' },
-  }
   const { animales, animalesExportados, camadas, sacrificios, entregas, jaulas, bio, bioterioActivo, agregarAnimal, editarAnimal, sacrificarReproductor, editarJaula, agregarJaula, eliminarJaula, editarCamada, registrarSacrificio, registrarEntrega, entregarReproductor } = useBioterio()
   const esHibridos = bioterioActivo === 'ratones_hibridos'
   // Sacrificios de ratones se manejan desde el Resumen global de ratones
