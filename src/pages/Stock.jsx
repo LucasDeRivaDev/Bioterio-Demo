@@ -185,6 +185,7 @@ function MiniCalidad({ icono, codigo, calidad, animal }) {
 }
 
 function BloqueJaula({ bloque, camadas, onClick, onEliminar, modoSeleccion = false, seleccionada = false, animalesReservados = new Map(), jaulasReservadas = new Map(), reservadosHibridos = new Map() }) {
+  const { tema } = useTheme()
   const cfg = CAT[bloque.categoria]
   const esStock = bloque.tipo === 'stock'
   // Estado de ciclo reproductivo — solo para hembras reproductoras
@@ -445,6 +446,7 @@ function BloqueJaula({ bloque, camadas, onClick, onEliminar, modoSeleccion = fal
 const labelEstadoRepro = { activo: 'Activo', en_apareamiento: 'En apareamiento', en_cria: 'En cría', retirado: 'Retirado', fallecido: 'Fallecido' }
 
 function JaulaModal({ bloque, jaulas, camadas, animales, onCerrar, editarJaula, agregarJaula, editarAnimal, onPromover, esHibridos }) {
+  const { tema } = useTheme()
   const cfg       = CAT[bloque.categoria]
   const esRepro   = bloque.tipo === 'reproductor'
   const esVirtual = Boolean(bloque.virtual)
@@ -954,6 +956,7 @@ function nivelCalidad(score) {
 }
 
 function CalidadBadge({ sexo, codigo, calidad, animal }) {
+  const { tema } = useTheme()
   const sinDatos = calidad === null
   const nivel    = sinDatos ? null : nivelCalidad(calidad.score)
   const alertaColor = animal?.notas ? (animal.nota_tipo === 'critica' ? '#ff1744' : '#ffb300') : null
@@ -993,6 +996,7 @@ function CalidadBadge({ sexo, codigo, calidad, animal }) {
 }
 
 function Row({ label, valor, color = '#8a9bb0' }) {
+  const { tema } = useTheme()
   return (
     <div className="flex items-center justify-between text-sm">
       <span className="text-xs uppercase tracking-widest font-semibold" style={{ color: tema.textMuted }}>{label}</span>
@@ -1004,6 +1008,7 @@ function Row({ label, valor, color = '#8a9bb0' }) {
 // ── Modal de planificación de apareamiento ────────────────────────────────────
 
 function ModalPlanificarApareamiento({ bloquesMacho, bloquesHembra, onGuardar, onCerrar }) {
+  const { tema } = useTheme()
   const [fechaPlanificada, setFechaPlanificada] = useState('')
   const [observaciones,    setObservaciones]    = useState('')
   const [guardando,        setGuardando]        = useState(false)
@@ -1106,6 +1111,7 @@ function ModalPlanificarApareamiento({ bloquesMacho, bloquesHembra, onGuardar, o
 }
 
 function ModalSacrificio({ bloques, onConfirmar, onCerrar, animalesReservados = new Map(), jaulasReservadas = new Map(), reservadosHibridos = new Map() }) {
+  const { tema } = useTheme()
   const [fecha, setFecha]       = useState(hoy())
   const [notas, setNotas]       = useState('')
   const [guardando, setGuardando] = useState(false)
@@ -1356,6 +1362,7 @@ function ModalSacrificio({ bloques, onConfirmar, onCerrar, animalesReservados = 
 }
 
 function ModalEntrega({ bloques, onConfirmar, onCerrar, animalesReservados = new Map(), jaulasReservadas = new Map(), reservadosHibridos = new Map() }) {
+  const { tema } = useTheme()
   const [fecha,        setFecha]        = useState(hoy())
   const [observaciones, setObservaciones] = useState('')
   const [guardando,    setGuardando]    = useState(false)
@@ -1597,6 +1604,7 @@ function ModalEntrega({ bloques, onConfirmar, onCerrar, animalesReservados = new
 // ── Modal para promover desde selección múltiple ──────────────────────────────
 
 function ModalPromoverReproductor({ bloques, animales, onConfirmar, onCerrar }) {
+  const { tema } = useTheme()
   const [guardando, setGuardando] = useState(false)
   const [items, setItems] = useState(() =>
     bloques.map((b) => {
@@ -1740,6 +1748,7 @@ function ModalPromoverReproductor({ bloques, animales, onConfirmar, onCerrar }) 
 // ── Componentes de la vista Resumen (existentes, sin cambios) ─────────────────
 
 function CategoriaCard({ icono, titulo, subtitulo, total, grupos, gruposLabel, machos, hembras, color, descripcion }) {
+  const { tema } = useTheme()
   return (
     <div className="rounded-2xl overflow-hidden" style={{ background: tema.bgCard, border: '1px solid rgba(30,51,82,0.8)' }}>
       <div className="px-5 py-4 flex items-center gap-3" style={{ background: `${color}08`, borderBottom: `1px solid ${color}18` }}>
