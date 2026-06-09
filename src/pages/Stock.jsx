@@ -157,6 +157,7 @@ function SexoDisplay({ bloque, cfg }) {
 }
 
 function MiniCalidad({ icono, codigo, calidad, animal }) {
+  const { tema } = useTheme()
   const alertaColor = animal?.notas ? (animal.nota_tipo === 'critica' ? '#ff1744' : '#ffb300') : null
   if (!calidad) return (
     <div className="flex items-center justify-between">
@@ -167,7 +168,7 @@ function MiniCalidad({ icono, codigo, calidad, animal }) {
       <span className="text-xs" style={{ color: '#2a3a50' }}>—</span>
     </div>
   )
-  const nivel = nivelCalidad(calidad.score)
+  const nivel = nivelCalidad(calidad.score, tema)
   return (
     <div className="flex items-center justify-between gap-1">
       <span className="text-xs font-mono" style={{ color: alertaColor ?? '#6a7f95' }}>
@@ -949,7 +950,7 @@ function calidadMacho(machoId, camadas) {
   return { score: rend.score_promedio, camadas: rend.total_camadas }
 }
 
-function nivelCalidad(score) {
+function nivelCalidad(score, tema) {
   if (score >= 8) return { label: 'Alta',  color: tema.accent, bg: 'rgba(0,230,118,0.12)',  borde: 'rgba(0,230,118,0.3)' }
   if (score >= 6) return { label: 'Media', color: tema.amber, bg: 'rgba(255,179,0,0.12)',  borde: 'rgba(255,179,0,0.3)' }
   return            { label: 'Baja',  color: tema.red, bg: 'rgba(255,61,87,0.12)',   borde: 'rgba(255,61,87,0.3)' }
@@ -958,7 +959,7 @@ function nivelCalidad(score) {
 function CalidadBadge({ sexo, codigo, calidad, animal }) {
   const { tema } = useTheme()
   const sinDatos = calidad === null
-  const nivel    = sinDatos ? null : nivelCalidad(calidad.score)
+  const nivel    = sinDatos ? null : nivelCalidad(calidad.score, tema)
   const alertaColor = animal?.notas ? (animal.nota_tipo === 'critica' ? '#ff1744' : '#ffb300') : null
   return (
     <div className="space-y-1">
