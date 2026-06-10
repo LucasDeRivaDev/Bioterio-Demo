@@ -12,7 +12,7 @@ import {
 import iterateNavLogo      from '../assets/logoiterate.png'
 import iterateNavLogoLight from '../assets/logoiteratefondoclaro.png'
 
-const LINK_INICIO    = { to: '/inicio', label: 'Inicio',       icon: <Home size={15} /> }
+const LINK_INICIO    = { to: '/landing', label: 'Inicio',      icon: <Home size={15} /> }
 const LINK_DASHBOARD = { to: '/',       label: 'Panel de hoy', icon: <LayoutDashboard size={15} /> }
 const LINK_REPORTES  = { to: '/reportes', label: 'Reportes e impresión', icon: <Printer size={15} /> }
 
