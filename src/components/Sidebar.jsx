@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { NavLink, useLocation } from 'react-router-dom'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useBioterio } from '../context/BiotheriumContext'
 import { useBioterioActivo } from '../context/BioterioActivoContext'
 import { useAuth } from '../context/AuthContext'
@@ -250,6 +250,7 @@ export default function Sidebar({ onCerrarSesion, onCerrarMenu }) {
   const { config, limpiarBioterio } = useBioterioActivo()
   const { tema, modoBrillo } = useTheme()
   const { sesion } = useAuth()
+  const navigate = useNavigate()
   const emailUsuario = sesion?.user?.email ?? ''
 
   const [fichaVisible, setFichaVisible] = useState(() => {
@@ -439,6 +440,20 @@ export default function Sidebar({ onCerrarSesion, onCerrarMenu }) {
       )}
 
       <ReportarError />
+
+      {/* Ver página de inicio */}
+      <button
+        onClick={() => navigate('/landing')}
+        className="mx-3 mb-2 w-[calc(100%-1.5rem)] flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-semibold transition-all"
+        style={{
+          background: 'rgba(0,230,118,0.06)',
+          border: '1px solid rgba(0,230,118,0.2)',
+          color: '#00e676',
+          cursor: 'pointer',
+        }}
+      >
+        ← Ver página de inicio
+      </button>
 
       {/* Usuario + cerrar sesión */}
       <div className="mx-3 mb-3 rounded-xl px-4 py-3"

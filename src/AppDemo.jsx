@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import PWAUpdatePrompt from './components/PWAUpdatePrompt'
 import { BioterioActivoProvider, useBioterioActivo } from './context/BioterioActivoContext'
@@ -288,11 +288,15 @@ function DemoRoot() {
   const { sesion, cargando, necesitaPassword } = useAuth()
   const { bioterioActivo, limpiarBioterio } = useBioterioActivo()
   const { modoBrillo } = useTheme()
+  const location = useLocation()
 
   function renderContenido() {
     if (cargando) return <PantallaCarga />
 
     if (necesitaPassword && sesion) return <PantallaCrearPassword />
+
+    // /landing siempre accesible aunque haya sesión activa
+    if (location.pathname === '/landing') return <Landing />
 
     if (!sesion) {
       return (
