@@ -1,29 +1,30 @@
 // ════════════════════════════════════════════════════════════════════════════
-//  COLONIA DEMOSTRATIVA COMPLETA — ITeRatE Demo
+//  COLONIA DEMOSTRATIVA — ITeRatE Demo  (versión comercial, "una por funcionalidad")
 //  ----------------------------------------------------------------------------
-//  Genera una colonia ficticia multi-bioterio con ~18 meses de historia
-//  diseñada para una demostración comercial: contiene un ejemplo de CADA
-//  escenario que el sistema sabe gestionar (reproductores, emparejamientos,
-//  preñeces, camadas, destetes, madurez, stock, entregas, sacrificios,
-//  incidentes, temperaturas, calendario, rankings y genealogía).
+//  Simula un bioterio REAL, pequeño-mediano, ordenado y entendible para un
+//  potencial cliente. La regla de diseño es: UN escenario representativo por
+//  funcionalidad — NO decenas de ejemplos de cada situación.
 //
-//  Todas las fechas son RELATIVAS A HOY (se calculan en cada carga / reset),
-//  de modo que el "Panel de Hoy", el calendario y las tareas automáticas
-//  siempre muestran escenarios vigentes (destete hoy, parto esperado hoy,
-//  madurez hoy, macho próximo a retiro, etc.).
+//  Cada línea genética tiene IDENTIDAD propia (no se repiten estructuras):
+//    · Ratas Wistar  → colonia principal: muestra TODO el flujo (parto, destete,
+//                      madurez, separación, retiro de macho, alertas san./reprod.,
+//                      mejor hembra/macho, camada excepcional, fin de ciclo).
+//    · BALB/c        → colonia chica y tranquila: una camada reciente + entrega.
+//    · C57BL/6       → colonia chica con UN apareamiento activo + camada histórica.
+//    · Híbridos F1   → SIN reproductores: solo stock generado (disponible/entregado)
+//                      e historial de producción a partir de padres exportados.
 //
-//  Especies / bioterios:
-//    · ratas            → Ratas Wistar
-//    · ratones_balbc    → Ratones BALB/c
-//    · ratones_c57      → Ratones C57BL/6
-//    · ratones_hibridos → Ratones Híbridos F1 (BALB/c × C57BL/6)
+//  Proporción de eventos buscada ≈ 70% normal · 20% positivo · 10% problemático.
+//  Sin alertas duplicadas ni sensación de colonia en crisis.
+//
+//  Todas las fechas son RELATIVAS A HOY (se recalculan en cada carga / reset),
+//  para que el Panel de Hoy y el calendario muestren escenarios vigentes.
 // ════════════════════════════════════════════════════════════════════════════
 
 const MS_DIA = 86_400_000
 
 // Devuelve una fecha YYYY-MM-DD desplazada `offset` días respecto de hoy
-// (offset negativo = pasado, positivo = futuro). Se ancla al mediodía para
-// evitar saltos de día por husos horarios / horario de verano.
+// (offset negativo = pasado, positivo = futuro). Anclada al mediodía.
 function diaISO(offset) {
   const d = new Date()
   d.setHours(12, 0, 0, 0)
@@ -77,7 +78,7 @@ function generar() {
         notas: a.sac.motivo, bioterio_id: a.bio,
       })
     }
-    // Reproductor retirado → registro de entrega
+    // Reproductor retirado y entregado → registro de entrega
     if (a.entrega) {
       entregas.push({
         id: `ent-rep-${a.id}`, camada_id: null, animal_id: a.id,
@@ -116,7 +117,7 @@ function generar() {
     }
   }
 
-  // Camada finalizada y destetada (en stock si se pasa `jaula`)
+  // Camada finalizada y destetada (entra al stock si se pasa `jaula > 0`)
   function completa(bio, id, madre, padre, nac, lat, crias, cm, ch, dest, jaula, jm, jh, notas, jnotas) {
     const p = PARAM[bio]
     pushCamada({
@@ -217,235 +218,165 @@ function generar() {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  //  BIOTERIO 1 — RATAS WISTAR  (showcase principal)
-  //  10 machos + 20 hembras reproductores activos + históricos
+  //  LÍNEA 1 — RATAS WISTAR  ·  Colonia principal (showcase completo)
+  //  4 machos + 8 hembras reproductores. Muestra UN ejemplo de cada escenario.
   // ══════════════════════════════════════════════════════════════════════════
-  const RB = 'ratas'
+  const W = 'ratas'
 
-  // — Fundadores (generación 0, históricos) → raíz de la genealogía —
-  animal({ bio: RB, id: 'ratas-fm', codigo: 'WM-F1', sexo: 'macho',  nac: -560, estado: 'retirado',
-           notas: 'Fundador de la colonia (línea Wistar original). Retirado por edad tras 16 meses de servicio.' })
-  animal({ bio: RB, id: 'ratas-fh', codigo: 'WH-F1', sexo: 'hembra', nac: -540, estado: 'retirado',
-           notas: 'Fundadora de la colonia. 3 ciclos completados. Retirada.' })
+  // — Fundadores (gen 0, retirados) → raíz de la genealogía —
+  animal({ bio: W, id: 'w-fm', codigo: 'WM-F', sexo: 'macho',  nac: -560, estado: 'retirado',
+           notas: 'Fundador de la colonia Wistar. Retirado por edad tras un ciclo completo de servicio.' })
+  animal({ bio: W, id: 'w-fh', codigo: 'WH-F', sexo: 'hembra', nac: -540, estado: 'retirado',
+           notas: 'Fundadora de la colonia Wistar. Retirada tras completar su ciclo reproductivo.' })
 
-  // — Machos reproductores activos (gen 1, hijos de fundadores) —
-  animal({ bio: RB, id: 'ratas-m01', codigo: 'WM-01', sexo: 'macho', nac: -200, madre: 'ratas-fh', padre: 'ratas-fm',
-           notas: '★ Mejor macho de la colonia. Latencia 1–2 días, camadas grandes y parejas.' })
-  animal({ bio: RB, id: 'ratas-m02', codigo: 'WM-02', sexo: 'macho', nac: -180, madre: 'ratas-fh', padre: 'ratas-fm' })
-  animal({ bio: RB, id: 'ratas-m03', codigo: 'WM-03', sexo: 'macho', nac: -160 })
-  animal({ bio: RB, id: 'ratas-m04', codigo: 'WM-04', sexo: 'macho', nac: -220,
-           notas: 'Bajo rendimiento: latencias altas y camadas chicas. Candidato a recambio.', nota_tipo: 'critica' })
-  animal({ bio: RB, id: 'ratas-m05', codigo: 'WM-05', sexo: 'macho', nac: -150 })
-  animal({ bio: RB, id: 'ratas-m06', codigo: 'WM-06', sexo: 'macho', nac: -140 })
-  animal({ bio: RB, id: 'ratas-m07', codigo: 'WM-07', sexo: 'macho', nac: -130 })
-  animal({ bio: RB, id: 'ratas-m08', codigo: 'WM-08', sexo: 'macho', nac: -95, madre: 'ratas-h01', padre: 'ratas-m01',
-           notas: 'Recién promovido a reproductor (3.ª generación). Aún sin camadas.' })
-  animal({ bio: RB, id: 'ratas-m09', codigo: 'WM-09', sexo: 'macho', nac: -240 })
-  animal({ bio: RB, id: 'ratas-m10', codigo: 'WM-10', sexo: 'macho', nac: -265,
-           notas: 'Próximo al límite de edad reproductiva (9 meses). Planificar reemplazo.' })
+  // — Machos reproductores (4) —
+  animal({ bio: W, id: 'w-m01', codigo: 'WM-01', sexo: 'macho', nac: -200, madre: 'w-fh', padre: 'w-fm',
+           notas: '★ Macho élite de la colonia. Latencia baja y camadas grandes y parejas.', nota_tipo: 'positiva' })
+  animal({ bio: W, id: 'w-m02', codigo: 'WM-02', sexo: 'macho', nac: -170 })
+  animal({ bio: W, id: 'w-m03', codigo: 'WM-03', sexo: 'macho', nac: -150 })
+  animal({ bio: W, id: 'w-m04', codigo: 'WM-04', sexo: 'macho', nac: -265,
+           notas: 'Próximo al límite de edad reproductiva (9 meses). Planificar su reemplazo.', nota_tipo: 'critica' })
 
-  // — Machos históricos —
-  animal({ bio: RB, id: 'ratas-mh1', codigo: 'WM-H1', sexo: 'macho', nac: -330, estado: 'fallecido',
-           sac: { fecha: -40, motivo: 'Sacrificio por edad límite (>9 meses)' } })
-  animal({ bio: RB, id: 'ratas-mh2', codigo: 'WM-H2', sexo: 'macho', nac: -300, estado: 'retirado',
-           entrega: { fecha: -30, obs: 'Dr. Pérez — Cátedra de Farmacología' },
-           notas: 'Reproductor entregado a investigador.' })
+  // — Hembras reproductoras (8) —
+  animal({ bio: W, id: 'w-h01', codigo: 'WH-01', sexo: 'hembra', nac: -260, madre: 'w-fh', padre: 'w-fm',
+           notas: '★ Mejor hembra de la colonia. Camadas grandes y 100% de supervivencia al destete.', nota_tipo: 'positiva' })
+  animal({ bio: W, id: 'w-h02', codigo: 'WH-02', sexo: 'hembra', nac: -250,
+           notas: 'Fin de ciclo reproductivo: 3 camadas completadas. Lista para descarte.', nota_tipo: 'critica' })
+  animal({ bio: W, id: 'w-h03', codigo: 'WH-03', sexo: 'hembra', nac: -200, estado: 'en_cria',
+           notas: 'Gestante — preñez activa. Parto esperado en los próximos días.' })
+  animal({ bio: W, id: 'w-h04', codigo: 'WH-04', sexo: 'hembra', nac: -190, estado: 'en_apareamiento',
+           notas: 'En apareamiento (día 10). Separación de la pareja próxima.' })
+  animal({ bio: W, id: 'w-h05', codigo: 'WH-05', sexo: 'hembra', nac: -210, estado: 'en_cria',
+           notas: 'Lactando. Destete programado para hoy.' })
+  animal({ bio: W, id: 'w-h06', codigo: 'WH-06', sexo: 'hembra', nac: -180,
+           notas: 'Última camada pequeña (6 crías) + una reabsorción. Monitorear rendimiento.' })
+  animal({ bio: W, id: 'w-h07', codigo: 'WH-07', sexo: 'hembra', nac: -220,
+           notas: 'Buena reproductora. Su última camada alcanza madurez ahora.' })
+  animal({ bio: W, id: 'w-h08', codigo: 'WH-08', sexo: 'hembra', nac: -160 })
 
-  // — Hembras reproductoras activas (gen 1) —
-  animal({ bio: RB, id: 'ratas-h01', codigo: 'WH-01', sexo: 'hembra', nac: -270, madre: 'ratas-fh', padre: 'ratas-fm',
-           notas: '★ Mejor hembra / hembra excelente. Camadas grandes, 100% de supervivencia.' })
-  animal({ bio: RB, id: 'ratas-h02', codigo: 'WH-02', sexo: 'hembra', nac: -250, madre: 'ratas-fh', padre: 'ratas-fm',
-           notas: 'Fin de ciclo reproductivo: 3 camadas completadas. Lista para descarte.' })
-  animal({ bio: RB, id: 'ratas-h03', codigo: 'WH-03', sexo: 'hembra', nac: -230 })
-  animal({ bio: RB, id: 'ratas-h04', codigo: 'WH-04', sexo: 'hembra', nac: -210, notas: 'Reabsorción registrada. En observación.' })
-  animal({ bio: RB, id: 'ratas-h05', codigo: 'WH-05', sexo: 'hembra', nac: -200, estado: 'en_cria', notas: 'Gestante. Parto esperado para hoy.' })
-  animal({ bio: RB, id: 'ratas-h06', codigo: 'WH-06', sexo: 'hembra', nac: -190, estado: 'en_cria', notas: 'Gestante. Parto esperado en ~5 días.' })
-  animal({ bio: RB, id: 'ratas-h07', codigo: 'WH-07', sexo: 'hembra', nac: -185, estado: 'en_apareamiento', notas: 'En apareamiento (día 10). Separación próxima.' })
-  animal({ bio: RB, id: 'ratas-h08', codigo: 'WH-08', sexo: 'hembra', nac: -240, estado: 'en_cria', notas: 'Lactando. Destete programado para hoy.' })
-  animal({ bio: RB, id: 'ratas-h09', codigo: 'WH-09', sexo: 'hembra', nac: -245, estado: 'en_cria', notas: 'Lactando. Destete vencido — separar.' })
-  animal({ bio: RB, id: 'ratas-h10', codigo: 'WH-10', sexo: 'hembra', nac: -235, estado: 'en_cria', notas: 'Lactando. Destete en 4 días.' })
-  animal({ bio: RB, id: 'ratas-h11', codigo: 'WH-11', sexo: 'hembra', nac: -260 })
-  animal({ bio: RB, id: 'ratas-h12', codigo: 'WH-12', sexo: 'hembra', nac: -255 })
-  animal({ bio: RB, id: 'ratas-h13', codigo: 'WH-13', sexo: 'hembra', nac: -220, estado: 'en_cria', notas: 'Parto reciente (hace 5 días). Camada saludable.' })
-  animal({ bio: RB, id: 'ratas-h14', codigo: 'WH-14', sexo: 'hembra', nac: -265 })
-  animal({ bio: RB, id: 'ratas-h15', codigo: 'WH-15', sexo: 'hembra', nac: -160 })
-  animal({ bio: RB, id: 'ratas-h16', codigo: 'WH-16', sexo: 'hembra', nac: -150 })
-  animal({ bio: RB, id: 'ratas-h17', codigo: 'WH-17', sexo: 'hembra', nac: -140 })
-  animal({ bio: RB, id: 'ratas-h18', codigo: 'WH-18', sexo: 'hembra', nac: -175, notas: 'Camada pequeña en su último parto (6 crías). Monitorear.' })
-  animal({ bio: RB, id: 'ratas-h19', codigo: 'WH-19', sexo: 'hembra', nac: -280,
-           notas: 'Hembra NO apta: 2 fallos reproductivos + camada chica. Baja confiabilidad — descartar.', nota_tipo: 'critica' })
-  animal({ bio: RB, id: 'ratas-h20', codigo: 'WH-20', sexo: 'hembra', nac: -130, notas: 'Joven, primera generación. Aún no apareada.' })
+  // — Camadas Wistar —
+  // Excepcional (mejor hembra × macho élite): supervivencia perfecta → stock jóvenes (POSITIVO)
+  completa(W, 'cam-w-01', 'w-h01', 'w-m01', -45, 1, 13, 6, 7, 13, 9, 4, 5, 'Camada excepcional: 13 crías, todas destetadas (100% de supervivencia).', '')
+  // Fin de ciclo de WH-02: 3 camadas históricas sanas (la última destetada → dispara "fin de ciclo")
+  completa(W, 'cam-w-02a', 'w-h02', 'w-m01', -210, 2, 11, 5, 6, 11, 0, 0, 0, 'Camada histórica (ciclo 1). Crías destinadas a protocolo.', '')
+  completa(W, 'cam-w-02b', 'w-h02', 'w-m03', -150, 2, 10, 5, 5, 10, 0, 0, 0, 'Camada histórica (ciclo 2).', '')
+  completa(W, 'cam-w-02c', 'w-h02', 'w-m01', -95,  2, 12, 6, 6, 12, 0, 0, 0, 'Camada histórica (ciclo 3). Tercer y último ciclo completado.', '')
+  // Preñez activa → parto esperado (confirmada por extendido día 0)
+  gestacion(W, 'cam-w-03', 'w-h03', 'w-m01', -26, 'Día 0 confirmado por extendido. Parto esperado en los próximos días.')
+  // Apareamiento activo → separación próxima
+  gestacion(W, 'cam-w-04', 'w-h04', 'w-m02', -10, 'Emparejamiento iniciado (día 10). Convivencia por finalizar — separar.')
+  // Camada lactando → destete hoy
+  lactante(W, 'cam-w-05', 'w-h05', 'w-m03', -21, 2, 12, 6, 6, 'Camada saludable, lactando. Destete programado para hoy.')
+  // Camada pequeña (<8) → alerta "evaluar hembra" (NEGATIVO, único de la colonia)
+  completa(W, 'cam-w-06', 'w-h06', 'w-m04', -60, 8, 6, 3, 3, 6, 6, 3, 3, 'Camada pequeña (6 crías). Latencia alta del macho.', '')
+  // Crías alcanzan madurez reproductiva hoy → stock adultos
+  completa(W, 'cam-w-07', 'w-h07', 'w-m01', -84, 2, 11, 5, 6, 11, 8, 4, 4, 'Crías alcanzan madurez reproductiva hoy. Candidatas a renovación.', '')
+  // Camada reciente → stock crías (1 muerte neonatal, supervivencia 90%)
+  completa(W, 'cam-w-08', 'w-h08', 'w-m02', -30, 2, 10, 5, 5, 9, 7, 4, 3, 'Camada reciente. 1 muerte neonatal; el resto sano.', 'Separar al destete.')
+  // Reabsorción de WH-06 → fallo reproductivo (NEGATIVO, sin generar alerta de stock)
+  fallo(W, 'cam-w-09', 'w-h06', 'w-m03', -50, 'reabsorption', 'Reabsorción confirmada: sin parto a 30 días post-cópula.')
 
-  // — Hembra histórica (descarte genético) —
-  animal({ bio: RB, id: 'ratas-hh1', codigo: 'WH-H1', sexo: 'hembra', nac: -320, estado: 'fallecido',
-           sac: { fecha: -50, motivo: 'Descarte por selección genética (línea de baja prolificidad)' } })
+  // — Sacrificio y entrega de stock —
+  sacrificio(W, 'sac-w-01', 'cam-w-08', 1, -10, 'cria', 'Sacrificio sanitario (una cría con dermatitis leve).')
+  entrega(W, 'ent-w-01', 'cam-w-01', 3, -5, 'Dra. Martínez — Protocolo 042 (Fisiología renal). Entrega realizada.')
 
-  // — Camadas (cubren todos los escenarios) —
-  // Excepcional + exitosa (mejor macho/hembra)  → stock jóvenes
-  completa(RB, 'cam-r-01', 'ratas-h01', 'ratas-m01', -45, 1, 13, 6, 7, 13, 13, 6, 7, 'Parto sin complicaciones. Camada excepcional, todos saludables.', '')
-  // Promedio, con entrega parcial               → stock adultos
-  completa(RB, 'cam-r-02', 'ratas-h02', 'ratas-m01', -100, 2, 11, 5, 6, 11, 7, 3, 4, 'Camada normal. 4 crías entregadas a protocolo.', '')
-  // Históricas de WH-02 (para cerrar 3 ciclos → fin de ciclo)
-  completa(RB, 'cam-r-02b', 'ratas-h02', 'ratas-m09', -200, 3, 10, 5, 5, 10, null, null, null, 'Camada histórica. Crías destinadas a protocolo externo.')
-  completa(RB, 'cam-r-02c', 'ratas-h02', 'ratas-m02', -150, 2, 11, 6, 5, 11, null, null, null, 'Camada histórica.')
-  // Con mortalidad neonatal + reducción         → stock crías
-  completa(RB, 'cam-r-03', 'ratas-h03', 'ratas-m02', -30, 3, 10, 5, 5, 9, 7, 4, 3, '1 muerte neonatal. Camada reducida a tamaño manejable.', 'Separar pronto.')
-  // Camada pequeña (<8)                          → stock jóvenes + alerta evaluar hembra
-  completa(RB, 'cam-r-04', 'ratas-h18', 'ratas-m04', -60, 8, 6, 3, 3, 6, 6, 3, 3, 'Camada pequeña (6 crías). Latencia alta del macho.', '')
-  // Baja supervivencia (canibalismo)            → stock jóvenes + alerta
-  completa(RB, 'cam-r-05', 'ratas-h19', 'ratas-m04', -75, 10, 9, 5, 4, 5, 4, 2, 2, 'Canibalismo parcial. Supervivencia 55%.', '')
-  // Histórica chica de WH-19
-  completa(RB, 'cam-r-19', 'ratas-h19', 'ratas-m09', -180, 5, 7, 4, 3, 7, null, null, null, 'Camada chica histórica.')
-  // Fallos reproductivos (3 tipos)
-  fallo(RB, 'cam-r-06', 'ratas-h19', 'ratas-m02', -40, 'no_birth', 'Sin signos de parto a 30 días post-cópula.')
-  fallo(RB, 'cam-r-08', 'ratas-h19', 'ratas-m01', -90, 'failed_pregnancy', 'Preñez interrumpida.')
-  fallo(RB, 'cam-r-07', 'ratas-h04', 'ratas-m03', -55, 'reabsorption', 'Reabsorción sospechada por ecografía.')
-  // Gestaciones
-  gestacion(RB, 'cam-r-09', 'ratas-h05', 'ratas-m01', -24, 'Día 0 confirmado por extendido. Parto esperado para hoy.')
-  gestacion(RB, 'cam-r-10', 'ratas-h06', 'ratas-m02', -22, 'Gestación en curso. Parto esperado en los próximos días.')
-  gestacion(RB, 'cam-r-11', 'ratas-h07', 'ratas-m03', -10, 'Emparejamiento recién iniciado (día 10). Separación próxima.')
-  // Destetes (hoy / vencido / próximo) — lactantes sin destete aún
-  lactante(RB, 'cam-r-12', 'ratas-h08', 'ratas-m05', -21, 2, 11, 6, 5, 'Destete programado para hoy.')
-  lactante(RB, 'cam-r-13', 'ratas-h09', 'ratas-m05', -24, 3, 10, 5, 5, 'Destete vencido hace 3 días.')
-  lactante(RB, 'cam-r-14', 'ratas-h10', 'ratas-m06', -17, 2, 12, 6, 6, 'Destete en 4 días.')
-  // Parto reciente (lactante)
-  lactante(RB, 'cam-r-17', 'ratas-h13', 'ratas-m07', -5, 1, 12, 6, 6, 'Parto hace 5 días. Camada saludable.')
-  // Madurez (hoy / próxima / recién) — camadas destetadas en stock
-  completa(RB, 'cam-r-15', 'ratas-h11', 'ratas-m01', -84, 2, 10, 4, 6, 10, 8, 3, 5, 'Crías alcanzan madurez reproductiva hoy.', '')
-  completa(RB, 'cam-r-16', 'ratas-h12', 'ratas-m02', -79, 2, 11, 5, 6, 11, 11, 5, 6, 'Crías próximas a madurez (~5 días).', '')
-  completa(RB, 'cam-r-20', 'ratas-h15', 'ratas-m03', -85, 3, 10, 5, 5, 10, 10, 5, 5, 'Crías recién maduras.', '')
-  // Stock adultos antiguo
-  completa(RB, 'cam-r-18', 'ratas-h14', 'ratas-m01', -120, 1, 12, 6, 6, 12, 10, 5, 5, 'Camada antigua, en stock como adultos.', '')
+  // — Incidentes Wistar (1 ambiental, 1 sanitario, 1 reproductivo) —
+  incidente({ bio: W, id: 'inc-w-amb', fecha: -18, cat: 'ambiental', tipo: 'corte_energia', sev: 'moderado', duracion: 1, resuelto: true,
+              desc: 'Corte de energía de 3 h. La temperatura bajó a 17 °C; se monitorearon los neonatos sin bajas.' })
+  incidente({ bio: W, id: 'inc-w-san', fecha: -7, cat: 'sanitario', tipo: 'heridas', sev: 'leve', animales: ['w-h08'], resuelto: true,
+              desc: 'WH-08 con heridas leves por peleas. Separada preventivamente. Recuperada.' })
+  incidente({ bio: W, id: 'inc-w-rep', fecha: -48, cat: 'reproductivo', tipo: 'reabsorcion', sev: 'moderado', camada: 'cam-w-09', madre: 'w-h06', padre: 'w-m03',
+              desc: 'Reabsorción confirmada en WH-06 (camada cam-w-09).' })
 
-  // — Sacrificios de stock (por categoría) —
-  sacrificio(RB, 'sac-r-01', 'cam-r-18', 2, -100, 'joven',  'Control de densidad poblacional')
-  sacrificio(RB, 'sac-r-02', 'cam-r-03', 2, -22,  'cria',   'Reducción de camada a tamaño manejable')
-  sacrificio(RB, 'sac-r-03', 'cam-r-05', 1, -55,  'cria',   'Sacrificio sanitario (cría con dermatitis severa)')
-
-  // — Entregas de stock —
-  entrega(RB, 'ent-r-01', 'cam-r-02', 4, -60, 'Dra. Martínez — Protocolo 042 (Fisiología renal) — entrega parcial')
-  entrega(RB, 'ent-r-02', 'cam-r-15', 2, -3,  'Lab. Histología — entrega reciente')
-
-  // — Incidentes —
-  incidente({ bio: RB, id: 'inc-r-01', fecha: -18, cat: 'ambiental', tipo: 'corte_energia', sev: 'moderado', duracion: 1, resuelto: true,
-              desc: 'Corte de energía de 3 h. La temperatura descendió a 17 °C. Se monitorearon todos los neonatos: sin bajas.' })
-  incidente({ bio: RB, id: 'inc-r-02', fecha: -40, cat: 'ambiental', tipo: 'temperatura_alta', sev: 'leve', resuelto: true,
-              desc: 'Pico de temperatura a 27 °C por falla transitoria de climatización. Corregido en el día.' })
-  incidente({ bio: RB, id: 'inc-r-03', fecha: -8, cat: 'sanitario', tipo: 'heridas', sev: 'leve', animales: ['ratas-h03'], resuelto: true,
-              desc: 'WH-03 con heridas leves por peleas. Separada preventivamente. Recuperada.' })
-  incidente({ bio: RB, id: 'inc-r-04', fecha: -53, cat: 'reproductivo', tipo: 'reabsorcion', sev: 'moderado', camada: 'cam-r-07', madre: 'ratas-h04', padre: 'ratas-m03',
-              desc: 'Reabsorción confirmada en WH-04: sin parto a los 30 días post-cópula.' })
-  incidente({ bio: RB, id: 'inc-r-05', fecha: -73, cat: 'reproductivo', tipo: 'canibalismo', sev: 'grave', camada: 'cam-r-05', madre: 'ratas-h19', padre: 'ratas-m04',
-              desc: 'Canibalismo parcial de la camada de WH-19. Supervivencia 55%.' })
-  incidente({ bio: RB, id: 'inc-r-06', fecha: -29, cat: 'reproductivo', tipo: 'muerte_neonatal', sev: 'leve', camada: 'cam-r-03', madre: 'ratas-h03', padre: 'ratas-m02',
-              desc: '1 muerte neonatal en la camada de WH-03.' })
-
-  // — Temperaturas (60 días, con 2 alertas históricas correlacionadas) —
-  genTemps(RB, 22.0, { '-18': 17.2, '-40': 27.1 })
-
+  // — Temperaturas (60 días, 1 alerta correlacionada con el corte de energía) —
+  genTemps(W, 22.0, { '-18': 17.2 })
   // — Ciclo estral de la hembra en apareamiento —
-  cicloEstral(RB, 'ratas-h07', -10)
+  cicloEstral(W, 'w-h04', -10)
 
   // ══════════════════════════════════════════════════════════════════════════
-  //  BIOTERIOS DE RATONES — generador parametrizado
+  //  LÍNEA 2 — RATONES BALB/c  ·  Colonia chica y tranquila
+  //  2 machos colonia + 2 machos exportados a F1 + 3 hembras. Camada reciente + entrega.
   // ══════════════════════════════════════════════════════════════════════════
-  function generarRatones({ bio, pfx, nM, nH, exportM = 0, exportH = 0 }) {
-    const P = PARAM[bio]
+  const B = 'ratones_balbc'
 
-    // — Fundadores —
-    animal({ bio, id: `${bio}-fm`, codigo: `${pfx}M-F1`, sexo: 'macho',  nac: -520, estado: 'retirado',
-             notas: 'Fundador de la línea. Retirado por edad.' })
-    animal({ bio, id: `${bio}-fh`, codigo: `${pfx}H-F1`, sexo: 'hembra', nac: -500, estado: 'retirado',
-             notas: 'Fundadora de la línea. Retirada tras 3 ciclos.' })
+  animal({ bio: B, id: 'b-fm', codigo: 'BM-F', sexo: 'macho',  nac: -500, estado: 'retirado', notas: 'Fundador de la línea BALB/c. Retirado.' })
+  animal({ bio: B, id: 'b-fh', codigo: 'BH-F', sexo: 'hembra', nac: -480, estado: 'retirado', notas: 'Fundadora de la línea BALB/c. Retirada.' })
 
-    // — Machos activos —
-    for (let i = 1; i <= nM; i++) {
-      const id = `${bio}-m${String(i).padStart(2, '0')}`
-      const codigo = `${pfx}M-${String(i).padStart(2, '0')}`
-      let a = { bio, id, codigo, sexo: 'macho', nac: -120 - i * 8 }
-      if (i === 1) { a = { ...a, nac: -150, madre: `${bio}-fh`, padre: `${bio}-fm`, notas: '★ Mejor macho de la línea. Camadas grandes, latencia baja.' } }
-      else if (i === 2) { a = { ...a, nac: -75, madre: `${bio}-h01`, padre: `${bio}-m01`, notas: 'Recién promovido a reproductor. Sin camadas todavía.' } }
-      else if (i === 3) { a = { ...a, nac: -200, notas: 'Bajo rendimiento: latencias altas y camadas chicas. Candidato a recambio.', nota_tipo: 'critica' } }
-      else if (i === nM) { a = { ...a, nac: -262, notas: 'Próximo al límite de edad reproductiva. Planificar reemplazo.' } }
-      // Exportados para producción de híbridos F1
-      if (exportM > 0 && i >= 4 && i < 4 + exportM) {
-        a.exportado = true
-        a.notas = (a.notas ? a.notas + ' ' : '') + 'Exportado al programa de híbridos F1.'
-      }
-      animal(a)
-    }
+  // Machos de colonia (2)
+  animal({ bio: B, id: 'b-m01', codigo: 'BM-01', sexo: 'macho', nac: -170, madre: 'b-fh', padre: 'b-fm',
+           notas: '★ Mejor macho de la línea. Camadas parejas.', nota_tipo: 'positiva' })
+  animal({ bio: B, id: 'b-m02', codigo: 'BM-02', sexo: 'macho', nac: -150 })
+  // Machos exportados al programa de Híbridos F1 (NO se comparten con la colonia)
+  animal({ bio: B, id: 'b-m03', codigo: 'BM-03', sexo: 'macho', nac: -140, exportado: true,
+           notas: 'Reproductor exportado al programa de híbridos F1 (cruza con C57).' })
+  animal({ bio: B, id: 'b-m04', codigo: 'BM-04', sexo: 'macho', nac: -130, exportado: true,
+           notas: 'Reproductor exportado al programa de híbridos F1 (cruza con C57).' })
+  // Hembras (3)
+  animal({ bio: B, id: 'b-h01', codigo: 'BH-01', sexo: 'hembra', nac: -200, madre: 'b-fh', padre: 'b-fm',
+           notas: '★ Mejor hembra de la línea. Buena supervivencia.', nota_tipo: 'positiva' })
+  animal({ bio: B, id: 'b-h02', codigo: 'BH-02', sexo: 'hembra', nac: -180 })
+  animal({ bio: B, id: 'b-h03', codigo: 'BH-03', sexo: 'hembra', nac: -160, estado: 'en_cria',
+           notas: 'Parto reciente. Camada sana, lactando.' })
 
-    // — Hembras activas —
-    for (let i = 1; i <= nH; i++) {
-      const id = `${bio}-h${String(i).padStart(2, '0')}`
-      const codigo = `${pfx}H-${String(i).padStart(2, '0')}`
-      let a = { bio, id, codigo, sexo: 'hembra', nac: -150 - i * 7 }
-      if (i === 1) { a = { ...a, nac: -240, madre: `${bio}-fh`, padre: `${bio}-fm`, notas: '★ Mejor hembra / excelente. Camadas grandes, 100% de supervivencia.' } }
-      else if (i === 2) { a = { ...a, nac: -170, notas: 'Camada pequeña reciente. Monitorear.' } }
-      else if (i === 3) { a = { ...a, nac: -260, notas: 'Hembra NO apta: fallos reproductivos + camada chica. Descartar.', nota_tipo: 'critica' } }
-      else if (i === 4) { a = { ...a, nac: -190, estado: 'en_cria', notas: 'Gestante. Parto esperado en ~5 días.' } }
-      else if (i === 5) { a = { ...a, nac: -200, estado: 'en_cria', notas: 'Lactando. Destete programado para hoy.' } }
-      else if (i === 6) { a = { ...a, nac: -180, estado: 'en_cria', notas: 'Parto reciente. Camada saludable.' } }
-      if (exportH > 0 && i >= 7 && i < 7 + exportH) {
-        a.exportado = true
-        a.notas = (a.notas ? a.notas + ' ' : '') + 'Exportada al programa de híbridos F1.'
-      }
-      animal(a)
-    }
+  // Camadas BALB/c
+  completa(B, 'cam-b-01', 'b-h01', 'b-m01', -40, 2, 9, 4, 5, 9, 8, 4, 4, 'Camada sana en stock (crías).', '')      // stock crías
+  completa(B, 'cam-b-02', 'b-h02', 'b-m02', -90, 2, 8, 4, 4, 8, 8, 4, 4, 'Camada en stock (adultos).', '')          // stock adultos
+  lactante(B, 'cam-b-03', 'b-h03', 'b-m01', -6, 1, 9, 5, 4, 'Camada reciente, lactando. Todo en orden.')             // reciente (sin tarea aún)
 
-    // — Históricos —
-    animal({ bio, id: `${bio}-mh`, codigo: `${pfx}M-H1`, sexo: 'macho', nac: -300, estado: 'fallecido',
-             sac: { fecha: -45, motivo: 'Sacrificio por edad límite reproductiva' } })
-    animal({ bio, id: `${bio}-hh`, codigo: `${pfx}H-H1`, sexo: 'hembra', nac: -290, estado: 'fallecido',
-             sac: { fecha: -55, motivo: 'Descarte por selección genética' } })
-    animal({ bio, id: `${bio}-mr`, codigo: `${pfx}M-H2`, sexo: 'macho', nac: -280, estado: 'retirado',
-             entrega: { fecha: -25, obs: 'Entregado a investigador' }, notas: 'Reproductor entregado.' })
+  // Entrega (representa el pedido asociado a la línea)
+  entrega(B, 'ent-b-01', 'cam-b-02', 3, -8, 'Bioterio externo — Pedido P-051. Entrega realizada.')
 
-    const M = (i) => `${bio}-m${String(i).padStart(2, '0')}`
-    const H = (i) => `${bio}-h${String(i).padStart(2, '0')}`
+  genTemps(B, 22.0)  // ambiente estable, sin alertas
 
-    // — Camadas (mejor macho M01 acumula varias buenas) —
-    completa(bio, `cam-${bio}-01`, H(1), M(1), -38, 1, 9, 4, 5, 9, 9, 4, 5, 'Camada excelente. Todos saludables.', '')          // crías
-    completa(bio, `cam-${bio}-02`, H(7), M(1), -95, 2, 9, 5, 4, 9, 6, 3, 3, 'Camada normal. Entrega parcial registrada.', '')    // adultos
-    completa(bio, `cam-${bio}-03`, H(8), M(3), -55, 3, 8, 4, 4, 8, 8, 4, 4, 'Camada promedio.', '')                              // jóvenes
-    completa(bio, `cam-${bio}-04`, H(2), M(3), -48, 6, 5, 3, 2, 5, 5, 3, 2, 'Camada pequeña (5 crías).', '')                     // jóvenes (pequeña)
-    completa(bio, `cam-${bio}-05`, H(3), M(3), -62, 8, 7, 4, 3, 3, 2, 1, 1, 'Baja supervivencia (43%).', '')                     // jóvenes (mortalidad)
-    completa(bio, `cam-${bio}-11`, H(7), M(1), -56, 2, 9, 4, 5, 9, 7, 3, 4, 'Crías alcanzan madurez reproductiva hoy.', '')      // madurez hoy (2 entregadas)
-    completa(bio, `cam-${bio}-12`, H(8), M(3), -100, 2, 9, 5, 4, 9, 7, 4, 3, 'Camada antigua, en stock como adultos.', '')       // adultos
-    completa(bio, `cam-${bio}-13`, H(1),  M(1), -130, 1, 9, 4, 5, 9, null, null, null, 'Camada histórica de la mejor línea.')    // histórica (sin stock)
-    // Fallos de la hembra no apta
-    fallo(bio, `cam-${bio}-06`, H(3), M(1), -32, 'no_birth', 'Sin signos de parto post-cópula.')
-    fallo(bio, `cam-${bio}-07`, H(3), M(1), -80, 'failed_pregnancy', 'Preñez interrumpida.')
-    // Gestación / destete / parto reciente
-    gestacion(bio, `cam-${bio}-08`, H(4), M(1), -16, 'Gestación en curso. Parto esperado en ~5 días.')
-    lactante(bio, `cam-${bio}-09`, H(5), M(1), -21, 2, 9, 5, 4, 'Destete programado para hoy.')
-    lactante(bio, `cam-${bio}-10`, H(6), M(3), -5, 1, 9, 4, 5, 'Parto hace 5 días. Camada saludable.')
+  // ══════════════════════════════════════════════════════════════════════════
+  //  LÍNEA 3 — RATONES C57BL/6  ·  Colonia chica con UN apareamiento activo
+  //  2 machos + 3 hembras colonia + 2 hembras exportadas a F1. Camada histórica.
+  // ══════════════════════════════════════════════════════════════════════════
+  const C = 'ratones_c57'
 
-    // — Sacrificios / entregas de stock —
-    sacrificio(bio, `sac-${bio}-01`, `cam-${bio}-12`, 2, -90, 'joven', 'Reducción de camada')
-    sacrificio(bio, `sac-${bio}-02`, `cam-${bio}-05`, 1, -45, 'cria',  'Sacrificio sanitario')
-    entrega(bio, `ent-${bio}-01`, `cam-${bio}-02`, 3, -40, 'Entrega parcial a laboratorio')
-    entrega(bio, `ent-${bio}-02`, `cam-${bio}-11`, 2, -4,  'Entrega reciente')
+  animal({ bio: C, id: 'c-fm', codigo: 'CM-F', sexo: 'macho',  nac: -500, estado: 'retirado', notas: 'Fundador de la línea C57. Retirado.' })
+  animal({ bio: C, id: 'c-fh', codigo: 'CH-F', sexo: 'hembra', nac: -480, estado: 'retirado', notas: 'Fundadora de la línea C57. Retirada.' })
 
-    // — Incidentes —
-    incidente({ bio, id: `inc-${bio}-01`, fecha: -22, cat: 'ambiental', tipo: 'temperatura_baja', sev: 'moderado', duracion: 1, resuelto: true,
-                desc: 'Falla de calefacción nocturna. Temperatura mínima 18 °C. Corregida sin bajas.' })
-    incidente({ bio, id: `inc-${bio}-02`, fecha: -12, cat: 'sanitario', tipo: 'alopecia', sev: 'leve', animales: [H(2)], resuelto: false,
-                desc: `${pfx}H-02 con alopecia leve en zona dorsal. En seguimiento.` })
-    incidente({ bio, id: `inc-${bio}-03`, fecha: -33, cat: 'reproductivo', tipo: 'no_prenez', sev: 'moderado', camada: `cam-${bio}-06`, madre: H(3), padre: M(1),
-                desc: `No preñez confirmada en ${pfx}H-03.` })
+  // Machos colonia (2)
+  animal({ bio: C, id: 'c-m01', codigo: 'CM-01', sexo: 'macho', nac: -180, madre: 'c-fh', padre: 'c-fm',
+           notas: '★ Mejor macho de la línea.', nota_tipo: 'positiva' })
+  animal({ bio: C, id: 'c-m02', codigo: 'CM-02', sexo: 'macho', nac: -150 })
+  // Hembras colonia (3)
+  animal({ bio: C, id: 'c-h01', codigo: 'CH-01', sexo: 'hembra', nac: -200, madre: 'c-fh', padre: 'c-fm',
+           notas: '★ Mejor hembra de la línea.', nota_tipo: 'positiva' })
+  animal({ bio: C, id: 'c-h02', codigo: 'CH-02', sexo: 'hembra', nac: -170 })
+  animal({ bio: C, id: 'c-h03', codigo: 'CH-03', sexo: 'hembra', nac: -160, estado: 'en_apareamiento',
+           notas: 'Apareamiento activo (día 10). Separación próxima.' })
+  // Hembras exportadas al programa de Híbridos F1 (reservadas, no se cruzan en C57)
+  animal({ bio: C, id: 'c-h04', codigo: 'CH-04', sexo: 'hembra', nac: -190, exportado: true,
+           notas: 'Reproductora exportada al programa de híbridos F1 (cruza con BALB/c).' })
+  animal({ bio: C, id: 'c-h05', codigo: 'CH-05', sexo: 'hembra', nac: -175, exportado: true,
+           notas: 'Reproductora exportada al programa de híbridos F1 (cruza con BALB/c).' })
 
-    // — Temperaturas + ciclo estral —
-    genTemps(bio, 22.0, { '-22': 18.1, '-30': 25.6 })
-    cicloEstral(bio, H(4), -16)
-  }
+  // Camadas C57
+  completa(C, 'cam-c-01', 'c-h01', 'c-m01', -95, 2, 9, 4, 5, 9, 8, 4, 4, 'Camada histórica en stock (adultos).', '')  // histórica/adultos
+  completa(C, 'cam-c-02', 'c-h02', 'c-m02', -40, 2, 8, 4, 4, 8, 8, 4, 4, 'Camada en stock (crías).', '')               // stock crías
+  gestacion(C, 'cam-c-03', 'c-h03', 'c-m01', -10, 'Emparejamiento iniciado (día 10). Convivencia por finalizar — separar.')  // apareamiento activo
 
-  // BALB/c — exporta 2 machos al programa de híbridos
-  generarRatones({ bio: 'ratones_balbc', pfx: 'B', nM: 6, nH: 12, exportM: 2 })
-  // C57BL/6 — exporta 2 hembras al programa de híbridos
-  generarRatones({ bio: 'ratones_c57', pfx: 'C', nM: 6, nH: 12, exportH: 2 })
-  // Híbridos F1 (BALB/c × C57BL/6)
-  generarRatones({ bio: 'ratones_hibridos', pfx: 'F', nM: 4, nH: 8 })
+  genTemps(C, 22.0)             // ambiente estable
+  cicloEstral(C, 'c-h03', -10)  // ciclo estral del apareamiento activo
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  LÍNEA 4 — RATONES HÍBRIDOS F1 (BALB/c × C57)  ·  SIN reproductores
+  //  Solo stock generado a partir de los reproductores exportados de BALB/c y C57.
+  //  Muestra: disponibles, entregados e historial de producción.
+  // ══════════════════════════════════════════════════════════════════════════
+  const F = 'ratones_hibridos'
+
+  // Producción F1 = padre exportado de BALB/c × madre exportada de C57
+  completa(F, 'cam-f-01', 'c-h04', 'b-m03', -35, 1, 10, 5, 5, 10, 9, 5, 4, 'Producción F1 disponible (crías).', '')   // disponibles (crías)
+  completa(F, 'cam-f-02', 'c-h04', 'b-m04', -80, 1, 11, 6, 5, 11, 10, 5, 5, 'Producción F1 en stock (adultos).', '')  // disponibles (adultos)
+  completa(F, 'cam-f-03', 'c-h05', 'b-m03', -120, 1, 10, 5, 5, 10, 0, 0, 0, 'Producción F1 histórica (entregada en su totalidad).', '')  // historial
+
+  // Entrega de stock F1 (animales entregados)
+  entrega(F, 'ent-f-01', 'cam-f-01', 2, -7, 'Cátedra de Inmunología — entrega de híbridos F1. Realizada.')
+
+  genTemps(F, 22.0)  // ambiente estable
 
   return { animales, camadas, jaulas, sacrificios, entregas, temperaturas, incidentes, extendidos }
 }

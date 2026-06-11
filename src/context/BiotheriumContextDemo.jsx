@@ -1,9 +1,15 @@
 // Versión demo de BiotheriumContext — usa localStorage en vez de Supabase.
 // Contrato idéntico al original: mismos estados y funciones exportadas.
-import { createContext, useContext, useReducer } from 'react'
+import { createContext, useContext, useReducer, useMemo } from 'react'
 import { generarId } from '../utils/storage'
 import { useBioterioActivo } from './BioterioActivoContext'
 import { getSeedInicial } from '../data/seedDemo'
+
+// Versión del seed. Al subirla, la demo descarta el localStorage viejo y vuelve
+// a sembrar la colonia curada (evita que clientes con datos previos vean la
+// versión saturada antigua).
+const SEED_VERSION = '2'
+const SEED_VERSION_KEY = 'demo_seed_version'
 
 // ─── Keys de localStorage ─────────────────────────────────────────────────────
 const LS = {
@@ -30,10 +36,12 @@ function guardar(key, valor) {
 
 // Si no hay datos en localStorage carga el seed
 function inicializar() {
+  const versionActual = localStorage.getItem(SEED_VERSION_KEY)
   const yaHayDatos = localStorage.getItem(LS.animales) !== null
-  if (!yaHayDatos) {
+  if (!yaHayDatos || versionActual !== SEED_VERSION) {
     const seed = getSeedInicial()
     Object.entries(LS).forEach(([k, lsKey]) => guardar(lsKey, seed[k]))
+    localStorage.setItem(SEED_VERSION_KEY, SEED_VERSION)
   }
   return {
     animales:     leer(LS.animales,     []),
@@ -139,6 +147,7 @@ export function BiotheriumDemoProvider({ children, onReset }) {
   function resetearDemo() {
     const seed = getSeedInicial()
     Object.entries(LS).forEach(([k, lsKey]) => guardar(lsKey, seed[k]))
+    localStorage.setItem(SEED_VERSION_KEY, SEED_VERSION)
     dispatch({ type: 'SET_ANIMALES',     payload: seed.animales })
     dispatch({ type: 'SET_CAMADAS',      payload: seed.camadas })
     dispatch({ type: 'SET_JAULAS',       payload: seed.jaulas })
@@ -372,18 +381,52 @@ export function BiotheriumDemoProvider({ children, onReset }) {
     guardar(LS.extendidos, siguientes)
   }
 
+  // ── Vistas filtradas por bioterio activo ───────────────────────────────────
+  // El store interno es global (todas las líneas), pero la app espera —igual que
+  // el proyecto original con Supabase— ver SOLO los datos del bioterio activo.
+  // Esto evita que el Panel de Hoy, Stock, Animales, etc. mezclen las 4 líneas.
+  const animales     = useMemo(() => estado.animales.filter((a) => a.bioterio_id === bioterioActivo),     [estado.animales, bioterioActivo])
+  const camadas      = useMemo(() => estado.camadas.filter((c) => c.bioterio_id === bioterioActivo),      [estado.camadas, bioterioActivo])
+  const sacrificios  = useMemo(() => estado.sacrificios.filter((s) => s.bioterio_id === bioterioActivo),  [estado.sacrificios, bioterioActivo])
+  const entregas     = useMemo(() => estado.entregas.filter((e) => e.bioterio_id === bioterioActivo),     [estado.entregas, bioterioActivo])
+  const jaulas       = useMemo(() => estado.jaulas.filter((j) => j.bioterio_id === bioterioActivo),       [estado.jaulas, bioterioActivo])
+  const temperaturas = useMemo(() => estado.temperaturas.filter((t) => t.bioterio_id === bioterioActivo), [estado.temperaturas, bioterioActivo])
+  const extendidos   = useMemo(() => estado.extendidos.filter((x) => x.bioterio_id === bioterioActivo),   [estado.extendidos, bioterioActivo])
+
+  // Reproductores exportados de BAL/C y C57 — solo visibles cuando el bioterio
+  // activo es Híbridos (son los padres de las camadas F1).
+  const animalesExportados = useMemo(() => {
+    if (bioterioActivo !== 'ratones_hibridos') return []
+    return estado.animales.filter(
+      (a) => ['ratones_balbc', 'ratones_c57'].includes(a.bioterio_id) && a.exportado_hibridos
+    )
+  }, [estado.animales, bioterioActivo])
+
+  // Camadas F1 donde un reproductor exportado de la línea activa (BAL/C o C57)
+  // figura como padre/madre — para Rendimiento y Estadísticas, sin contar como stock.
+  const camadasF1 = useMemo(() => {
+    if (!['ratones_balbc', 'ratones_c57'].includes(bioterioActivo)) return []
+    const exportadoIds = new Set(
+      estado.animales.filter((a) => a.bioterio_id === bioterioActivo && a.exportado_hibridos).map((a) => a.id)
+    )
+    if (exportadoIds.size === 0) return []
+    return estado.camadas.filter(
+      (c) => c.bioterio_id === 'ratones_hibridos' && (exportadoIds.has(c.id_padre) || exportadoIds.has(c.id_madre))
+    )
+  }, [estado.animales, estado.camadas, bioterioActivo])
+
   return (
     <BiotheriumCtx.Provider value={{
-      animales:           estado.animales,
-      animalesExportados: [],
-      camadas:            estado.camadas,
-      camadasF1:          [],
-      sacrificios:        estado.sacrificios,
-      entregas:           estado.entregas,
-      jaulas:             estado.jaulas,
-      temperaturas:       estado.temperaturas,
+      animales,
+      animalesExportados,
+      camadas,
+      camadasF1,
+      sacrificios,
+      entregas,
+      jaulas,
+      temperaturas,
       incidentes:         estado.incidentes,
-      extendidos:         estado.extendidos,
+      extendidos,
       pedidos:            [],
       cargando: false,
       error: null,
